@@ -25,7 +25,7 @@ camera.p1: 0
 camera.p2: 0
 camera.k3: 0
 #
-camera.baseline: 1.0
+camera.baseline: 0.53717
 #
 num_features: 150
 num_features_init: 50

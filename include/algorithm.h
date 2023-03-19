@@ -37,6 +37,17 @@ inline bool triangulation(const std::vector<SE3> &poses,
     return false;
 }
 
+// 输入，bf, 视差d, 相机归一化平面坐标
+inline bool stereo_triangulation(const double &bf, const double &d,  Vec3 &pt_world)
+{
+    if(d<3){
+        return false; //视差太小，放弃
+    }
+    double z = bf/d;
+    pt_world.z() = z;
+    return true;
+}
+
 // converters
 inline Vec2 toVec2(const cv::Point2f p) { return Vec2(p.x, p.y); }
 

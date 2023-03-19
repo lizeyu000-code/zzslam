@@ -9,7 +9,7 @@
 #include <glog/logging.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui.hpp>
-// #include "vo_system.h"
+#include "vo_system.h"
 
 using namespace std;
 
@@ -21,15 +21,15 @@ void LoadImages(const string &strPathToSequence, vector<string> &vstrImageLeft,
 
 int main(int argc, char **argv) 
 {
-    google::InitGoogleLogging(argv[0]);
-    google::SetLogDestination(google::GLOG_INFO, "../logs/");
-    google::SetStderrLogging(google::INFO);  
-    FLAGS_logbufsecs = 0;  
-
     if (argc != 2) {
         cout << "usage: ../bin/run_kitti_stereo data_path" << endl;
         return -1;
     }
+
+    google::InitGoogleLogging(argv[0]);
+    google::SetLogDestination(google::GLOG_INFO, "../logs/");
+    google::SetStderrLogging(google::INFO);  
+    FLAGS_logbufsecs = 0;  
 
     vector<string> vstrImageLeft;
     vector<string> vstrImageRight;
@@ -39,7 +39,12 @@ int main(int argc, char **argv)
     const int nImages = vstrImageLeft.size();
 
     // vo init here
-
+    myslam::VisualOdometry::Ptr vo(new myslam::VisualOdometry(config_file_path));
+    bool init_success = vo->Init();
+    if(!init_success) {
+        LOG(FATAL) << "VO init failed!,please check.";
+        return -1;
+    }
     // vector<float> vTimesTrack;
     // vTimesTrack.resize(nImages);
 
@@ -58,10 +63,16 @@ int main(int argc, char **argv)
                  << string(vstrImageLeft[ni]) << endl;
             return -1;
         }
-
-        cv::imshow("curren frame", imLeft);
+        // cv::imshow("curren frame", imLeft);
         
-        int k = cv::waitKey(50);
+        myslam::Multi_Sensor_Data data_input;
+        data_input.time_stamp_ = tframe;
+        data_input.left_img = imLeft;
+        data_input.right_img = imRight;
+
+        SE3 tcw_now = vo->TrackStereo(data_input);
+
+        int k = cv::waitKey(0);
         if (k==27)
             break;
         

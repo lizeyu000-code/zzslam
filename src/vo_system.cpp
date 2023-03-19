@@ -2,6 +2,7 @@
 // Created by huws on 23-03-19.
 //
 #include "vo_system.h"
+#include <opencv2/calib3d.hpp>
 #include <opencv2/core/eigen.hpp>
 #include <chrono>
 
@@ -16,15 +17,8 @@ VisualOdometry::VisualOdometry(std::string &config_path)
 
 bool VisualOdometry::Init() {
     // read from config file
-    // if (Config::SetParameterFile(config_file_path_) == false) {
-    //     return false;
-    // }
-    // dataset_ =
-    //     Dataset::Ptr(new Dataset(Config::Get<std::string>("dataset_dir")));
-    // CHECK_EQ(dataset_->Init(), true);
     bool success = ParameterSet();
-    if(!success){
-
+    if(!success) {
         return false;
     }
 
@@ -54,14 +48,15 @@ SE3 VisualOdometry::TrackStereo(Multi_Sensor_Data data_input_)
     if (data_input_.left_img.data == nullptr 
         || data_input_.right_img.data == nullptr) {
         std::cerr << "left or right image is empty!!! please check." << std::endl;
-        return SE3;
+        SE3 empty_pose;
+        return empty_pose;
     }
 
     cv::Mat left_image_undistored, right_image_undistored;
     //去畸变
     if (0) {
-        remap(data_input_.left_img, left_image_undistored, map1, map2, cv::INTER_LINEAR);  
-        remap(data_input_.right_img, right_image_undistored, map1, map2, cv::INTER_LINEAR); 
+        // remap(data_input_.left_img, left_image_undistored, map1, map2, cv::INTER_LINEAR);  
+        // remap(data_input_.right_img, right_image_undistored, map1, map2, cv::INTER_LINEAR); 
     }else{
         left_image_undistored = data_input_.left_img.clone();
         right_image_undistored = data_input_.right_img.clone();
@@ -76,14 +71,15 @@ SE3 VisualOdometry::TrackStereo(Multi_Sensor_Data data_input_)
 
     // 创建帧
     auto new_frame = Frame::CreateFrame();
+    new_frame->time_stamp_ = data_input_.time_stamp_;
     new_frame->left_img_ = left_image_undistored;
     new_frame->right_img_ = right_image_undistored;
-    new_frame->imu_raw_data_ = data_input_.Imu_Data;
-    new_frame->Wheel_Odom_ = data_input_.Wheel_Odom_data;
+    // new_frame->Imu_Data_ = data_input_.Imu_Data;
+    // new_frame->Wheel_Odom_ = data_input_.Wheel_Odom_data;
 
     // track
     SE3 tcw_ = frontend_->AddFrame(new_frame);
-    LOG(INFO) << "vo" << t1.toc() << "ms";
+    LOG(INFO) << "vo cost : " << t1.toc() << "ms";
 
     return tcw_;
 } 
@@ -124,15 +120,17 @@ bool VisualOdometry::ParameterSet()
     cv::Mat cv_K, cv_D;
     cv::eigen2cv(cameras_[0]->K() , cv_K);
     cv::eigen2cv(cameras_[0]->D() , cv_D);
-    cv::Size imageSize(img_col, img_row);
-    NewCameraMatrix = getOptimalNewCameraMatrix(cv_K, cv_D, imageSize, alpha, imageSize, 0);
-    initUndistortRectifyMap(cv_K, cv_D, cv::Mat(), NewCameraMatrix, imageSize, CV_16SC2, map1, map2);
+
+    // cv::Size imageSize(img_col, img_row);
+    // NewCameraMatrix = getOptimalNewCameraMatrix(cv_K, cv_D, imageSize, alpha, imageSize, 0);
+    // cv::initUndistortRectifyMap(cv_K, cv_D, cv::Mat(), NewCameraMatrix, imageSize, CV_16SC2, map1, map2);
 
     std::cout<< "camera k is: " << cv_K << std::endl;
     std::cout<< "camera d is: " << cv_D << std::endl;
+    std::cout<< "camera baseline is: " << base_line << std::endl;
 
     fsSettings.release();
-    printf("dataset init success. \n");
+    printf("Parameter Set success. \n");
     return true;
 } 
 

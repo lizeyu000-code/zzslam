@@ -109,7 +109,7 @@ typedef Sophus::SO3d SO3;
 // for cv
 #include <opencv2/core/core.hpp>
 
-// using cv::Mat;
+using cv::Mat;
 #include "tic_toc.h"
 
 // glog

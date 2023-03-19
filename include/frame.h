@@ -28,7 +28,7 @@ struct Frame {
     SE3 pose_;                       // Tcw 形式Pose
     std::mutex pose_mutex_;          // Pose数据锁
     cv::Mat left_img_, right_img_;   // stereo images
-    Vec9 Imu_Data_;              // imu raw data , may be rpy acc gyro
+    Vec9 Imu_Data_;              // imu raw data , it could be rpy + acc + gyro
     SE3 Wheel_Odom_;                 // To0oi
 
     // extracted features in left image

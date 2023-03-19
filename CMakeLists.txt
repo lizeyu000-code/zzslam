@@ -5,7 +5,7 @@ set(CMAKE_BUILD_TYPE Release)
 
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
 set(CMAKE_CXX_FLAGS "-std=c++17 -Wall")
-set(CMAKE_CXX_FLAGS_RELEASE  "-std=c++17 -O3 -fopenmp -pthread")
+set(CMAKE_CXX_FLAGS_RELEASE  "-std=c++17 -O3 -pthread")
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
@@ -40,11 +40,13 @@ include_directories(${GLOG_INCLUDE_DIRS})
 find_package(CSparse REQUIRED)
 include_directories(${CSPARSE_INCLUDE_DIR})
 
+
 set(THIRD_PARTY_LIBS
         ${OpenCV_LIBS}
         ${Sophus_LIBRARIES}
         ${Pangolin_LIBRARIES}
-        ${G2O_LIBRARIES}
+        # ${G2O_LIBRARIES}
+        g2o_core g2o_stuff g2o_types_sba g2o_solver_csparse g2o_csparse_extension
         ${GLOG_LIBRARIES}
         ${CSPARSE_LIBRARY}
         pthread

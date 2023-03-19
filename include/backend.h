@@ -31,6 +31,10 @@ class Backend {
         cam_right_ = right;
     }
 
+    void SetCameras(Camera::Ptr left) {
+        cam_left_ = left;
+    }
+
     /// 设置地图
     void SetMap(std::shared_ptr<Map> map) { map_ = map; }
 

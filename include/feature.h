@@ -24,6 +24,8 @@ struct Feature {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
     typedef std::shared_ptr<Feature> Ptr;
 
+    unsigned long id_ = 0;  // ID
+    int track_cnt = 0;
     std::weak_ptr<Frame> frame_;         // 持有该feature的frame
     cv::KeyPoint position_;              // 2D提取位置
     std::weak_ptr<MapPoint> map_point_;  // 关联地图点

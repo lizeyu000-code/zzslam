@@ -110,4 +110,11 @@ void Map::CleanMap() {
     LOG(INFO) << "Removed " << cnt_landmark_removed << " active landmarks";
 }
 
+void Map::RetMap() {
+    active_landmarks_.clear();
+    active_keyframes_.clear();
+    landmarks_.clear();
+    keyframes_.clear();
+}
+
 }  // namespace myslam

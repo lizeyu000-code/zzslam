@@ -27,7 +27,7 @@ class Frontend {
     Frontend();
 
     /// 外部接口，添加一个帧并计算其定位结果
-    bool AddFrame(Frame::Ptr frame);
+    SE3 AddFrame(Frame::Ptr frame);
 
     /// Set函数
     void SetMap(Map::Ptr map) { map_ = map; }
@@ -91,6 +91,13 @@ class Frontend {
      */
     int DetectFeatures();
 
+
+    void GridFastDetector(const cv::Mat& image_input, 
+                        std::vector<cv::Point2f>& kps, 
+                        const cv::Mat& mask, 
+                        Eigen::Vector2d& GaryThreshold, 
+                        int blockSize);
+
     /**
      * Find the corresponding features in right image of current_frame_
      * @return num of features found
@@ -138,7 +145,7 @@ class Frontend {
     int num_features_needed_for_keyframe_ = 80;
 
     // utilities
-    cv::Ptr<cv::GFTTDetector> gftt_;  // feature detector in opencv
+    // cv::Ptr<cv::GFTTDetector> gftt_;  // feature detector in opencv
 };
 
 }  // namespace myslam
