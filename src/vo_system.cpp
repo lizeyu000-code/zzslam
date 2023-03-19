@@ -4,6 +4,7 @@
 #include "vo_system.h"
 #include <opencv2/calib3d.hpp>
 #include <opencv2/core/eigen.hpp>
+#include <opencv2/highgui.hpp>
 #include <chrono>
 
 namespace myslam {
@@ -80,7 +81,7 @@ SE3 VisualOdometry::TrackStereo(Multi_Sensor_Data data_input_)
     // track
     SE3 tcw_ = frontend_->AddFrame(new_frame);
     LOG(INFO) << "vo cost : " << t1.toc() << "ms";
-
+    // cv::waitKey(0);
     return tcw_;
 } 
 

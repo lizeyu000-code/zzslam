@@ -1,9 +1,9 @@
 //
-// Created by gaoxiang on 19-5-2.
+// Created by huws on 23-03-20.
 //
 
 #include <opencv2/opencv.hpp>
-
+#include <opencv2/highgui.hpp>
 #include "algorithm.h"
 #include "backend.h"
 #include "feature.h"
@@ -50,7 +50,9 @@ bool Frontend::Track() {
 
     int num_track_last = TrackLastFrame();
     tracking_inliers_ = EstimateCurrentPose();
-
+    //
+    LOG(INFO) << "tracking_inliers_ is : " << tracking_inliers_;
+    //
     if (tracking_inliers_ > num_features_tracking_) {
         // tracking good
         status_ = FrontendStatus::TRACKING_GOOD;
@@ -87,7 +89,7 @@ bool Frontend::InsertKeyframe() {
     // track in right image
     FindFeaturesInRight();
     // triangulate map points
-    TriangulateNewPoints();
+    // TriangulateNewPoints();
     // update backend because we have a new keyframe
     // backend_->UpdateMap();
 
@@ -159,7 +161,7 @@ int Frontend::EstimateCurrentPose() {
 
     // K
     Mat33 K = camera_left_->K();
-
+    printf("point 0.\n");
     // edges
     int index = 1;
     std::vector<EdgeProjectionPoseOnly *> edges;
@@ -182,6 +184,7 @@ int Frontend::EstimateCurrentPose() {
         }
     }
 
+    printf("point 1.\n");
     // estimate the Pose the determine the outliers
     const double chi2_th = 5.991;
     int cnt_outlier = 0;
@@ -190,7 +193,6 @@ int Frontend::EstimateCurrentPose() {
         optimizer.initializeOptimization();
         optimizer.optimize(10);
         cnt_outlier = 0;
-
         // count the outliers
         for (size_t i = 0; i < edges.size(); ++i) {
             auto e = edges[i];
@@ -205,13 +207,12 @@ int Frontend::EstimateCurrentPose() {
                 features[i]->is_outlier_ = false;
                 e->setLevel(0);
             };
-
             if (iteration == 2) {
-                e->setRobustKernel(nullptr);
+                e->setRobustKernel(nullptr); //为什么第二次迭代要去掉鲁棒核函数？
             }
         }
     }
-
+    printf("point 2.\n");
     LOG(INFO) << "Outlier/Inlier in pose estimating: " << cnt_outlier << "/"
               << features.size() - cnt_outlier;
     // Set pose and outlier
@@ -295,11 +296,12 @@ int Frontend::TrackLastFrame() {
     }
 
     #if DEBUG
-    cv::imshow("kp_im_show",kp_im_show);
     LOG(INFO) << "光流匹配到 " << num_good_pts << " 图像特征点." 
             << " 另外匹配到 " << num_match_mpts << " 个地图点.";
+    cv::imshow("kp_im_show",kp_im_show);
+    // cv::waitKey(0);
     #endif
-    
+
     return num_good_pts;
 }
 
@@ -342,7 +344,6 @@ int Frontend::DetectFeatures() {
             Feature::Ptr(new Feature(current_frame_, kp_tmp)));
         cnt_detected++;
     }
-
     LOG(INFO) << "Detect " << cnt_detected << " new features";
     return cnt_detected;
 }

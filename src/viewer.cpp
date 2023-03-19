@@ -61,9 +61,9 @@ void Viewer::ThreadLoop() {
             DrawFrame(current_frame_, green);
             FollowCurrentFrame(vis_camera);
 
-            cv::Mat img = PlotFrameImage();
-            cv::imshow("image", img);
-            cv::waitKey(1);
+            // cv::Mat img = PlotFrameImage();
+            // cv::imshow("image", img);
+            // cv::waitKey(1);
         }
 
         if (map_) {
@@ -83,8 +83,7 @@ cv::Mat Viewer::PlotFrameImage() {
     for (size_t i = 0; i < current_frame_->features_left_.size(); ++i) {
         if (current_frame_->features_left_[i]->map_point_.lock()) {
             auto feat = current_frame_->features_left_[i];
-            cv::circle(img_out, feat->position_.pt, 2, cv::Scalar(0, 250, 0),
-                       2);
+            cv::circle(img_out, feat->position_.pt, 2, cv::Scalar(0, 250, 0), 2);
         }
     }
     return img_out;
@@ -146,15 +145,16 @@ void Viewer::DrawFrame(Frame::Ptr frame, const float* color) {
 
 void Viewer::DrawMapPoints() {
     const float red[3] = {1.0, 0, 0};
+    const float black[3] = {0, 0, 0};
     for (auto& kf : active_keyframes_) {
         DrawFrame(kf.second, red);
     }
 
-    glPointSize(2);
+    glPointSize(3);
     glBegin(GL_POINTS);
     for (auto& landmark : active_landmarks_) {
         auto pos = landmark.second->Pos();
-        glColor3f(red[0], red[1], red[2]);
+        glColor3f(black[0], black[1], black[2]);
         glVertex3d(pos[0], pos[1], pos[2]);
     }
     glEnd();

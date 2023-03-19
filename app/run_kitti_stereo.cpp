@@ -63,7 +63,7 @@ int main(int argc, char **argv)
                  << string(vstrImageLeft[ni]) << endl;
             return -1;
         }
-        // cv::imshow("curren frame", imLeft);
+        cv::imshow("curren frame", imLeft);
         
         myslam::Multi_Sensor_Data data_input;
         data_input.time_stamp_ = tframe;
