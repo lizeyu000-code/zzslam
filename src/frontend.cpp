@@ -84,12 +84,13 @@ bool Frontend::InsertKeyframe() {
               << current_frame_->keyframe_id_;
 
     SetObservationsForKeyFrame();
-    DetectFeatures();  // detect new features
-
+    // detect new features
+    DetectFeatures();  
     // track in right image
     FindFeaturesInRight();
+
     // triangulate map points
-    // TriangulateNewPoints();
+    TriangulateNewPoints();
     // update backend because we have a new keyframe
     // backend_->UpdateMap();
 
@@ -106,30 +107,39 @@ void Frontend::SetObservationsForKeyFrame() {
 }
 
 int Frontend::TriangulateNewPoints() {
-    std::vector<SE3> poses{camera_left_->pose(), camera_right_->pose()};
+    // std::vector<SE3> poses{camera_left_->pose(), camera_right_->pose()};
     SE3 current_pose_Twc = current_frame_->Pose().inverse();
     int cnt_triangulated_pts = 0;
     for (size_t i = 0; i < current_frame_->features_left_.size(); ++i) {
         if (current_frame_->features_left_[i]->map_point_.expired() &&
             current_frame_->features_right_[i] != nullptr) {
             // 左图的特征点未关联地图点且存在右图匹配点，尝试三角化
-            std::vector<Vec3> points{
-                camera_left_->pixel2camera(
+            // std::vector<Vec3> points{
+            //     camera_left_->pixel2camera(
+            //         Vec2(current_frame_->features_left_[i]->position_.pt.x,
+            //              current_frame_->features_left_[i]->position_.pt.y)),
+            //     camera_right_->pixel2camera(
+            //         Vec2(current_frame_->features_right_[i]->position_.pt.x,
+            //              current_frame_->features_right_[i]->position_.pt.y))};
+            float disparity = current_frame_->features_left_[i]->position_.pt.x -
+                    current_frame_->features_right_[i]->position_.pt.x;
+            if (disparity < 3) {
+                continue;
+            }
+            double depth = camera_left_->fx_ * camera_left_->baseline_ / disparity;
+            // Vec3 pworld = Vec3::Zero();
+            Vec3 pworld = camera_left_->pixel2camera(
                     Vec2(current_frame_->features_left_[i]->position_.pt.x,
-                         current_frame_->features_left_[i]->position_.pt.y)),
-                camera_right_->pixel2camera(
-                    Vec2(current_frame_->features_right_[i]->position_.pt.x,
-                         current_frame_->features_right_[i]->position_.pt.y))};
-            Vec3 pworld = Vec3::Zero();
+                        current_frame_->features_left_[i]->position_.pt.y),
+                        depth);
 
-            if (triangulation(poses, points, pworld) && pworld[2] > 0) {
+            // if (triangulation(poses, points, pworld) && pworld[2] > 0) {
+            if(pworld[2] > 0) {
                 auto new_map_point = MapPoint::CreateNewMappoint();
                 pworld = current_pose_Twc * pworld;
                 new_map_point->SetPos(pworld);
-                new_map_point->AddObservation(
-                    current_frame_->features_left_[i]);
-                new_map_point->AddObservation(
-                    current_frame_->features_right_[i]);
+                new_map_point->AddObservation(current_frame_->features_left_[i]);
+                new_map_point->AddObservation(current_frame_->features_right_[i]);
 
                 current_frame_->features_left_[i]->map_point_ = new_map_point;
                 current_frame_->features_right_[i]->map_point_ = new_map_point;
@@ -161,7 +171,7 @@ int Frontend::EstimateCurrentPose() {
 
     // K
     Mat33 K = camera_left_->K();
-    printf("point 0.\n");
+
     // edges
     int index = 1;
     std::vector<EdgeProjectionPoseOnly *> edges;
@@ -184,7 +194,6 @@ int Frontend::EstimateCurrentPose() {
         }
     }
 
-    printf("point 1.\n");
     // estimate the Pose the determine the outliers
     const double chi2_th = 5.991;
     int cnt_outlier = 0;
@@ -212,7 +221,7 @@ int Frontend::EstimateCurrentPose() {
             }
         }
     }
-    printf("point 2.\n");
+
     LOG(INFO) << "Outlier/Inlier in pose estimating: " << cnt_outlier << "/"
               << features.size() - cnt_outlier;
     // Set pose and outlier
@@ -267,9 +276,7 @@ int Frontend::TrackLastFrame() {
         }
     }
 
-    // step 3 mask剔除点
-
-    // step 4 
+    // step 3 
     int num_good_pts = 0;
     int num_match_mpts = 0;
     cv::Mat kp_im_show = current_frame_->left_img_.clone();
@@ -282,25 +289,63 @@ int Frontend::TrackLastFrame() {
             feature->track_cnt = last_frame_->features_left_[i]->track_cnt + 1;  //追踪次数+1
             if ( last_frame_->features_left_[i]->map_point_.lock()) {
                 feature->map_point_ = last_frame_->features_left_[i]->map_point_;  //匹配上了就直接把上一帧的地图点拿过来
-                num_match_mpts++;
+                // num_match_mpts++;
             }
             current_frame_->features_left_.push_back(feature);
-            num_good_pts++;
+            // num_good_pts++;
+        }
+    }
 
-            #if DEBUG
-            double len = std::min(1.0, 1.0 * feature->track_cnt / 7);
-            cv::circle(kp_im_show, kps_current.at(i), 3, cv::Scalar(255 * (1 - len), 0, 255 * len), cv::FILLED); //BGR
-            cv::line(kp_im_show, kps_last.at(i), kps_current.at(i), cv::Scalar(0, 255, 0), 1);
-            #endif
+    // step 4 mask剔除点,优先保留观测次数多的点
+    cv::Mat mask_for_redu_feat(current_frame_->left_img_.size(), CV_8UC1, cv::Scalar(255));
+    // 根据追踪次数给特征点重新排个序 , 利用光流特点，追踪多的稳定性好，排前面
+    std::vector< std::pair<int, Feature::Ptr>> cnt_pts_id;
+    for (int i = 0; i < current_frame_->features_left_.size(); i++){
+        cnt_pts_id.push_back(std::make_pair(current_frame_->features_left_[i]->track_cnt, current_frame_->features_left_[i]));
+    }
+    sort(cnt_pts_id.begin(), cnt_pts_id.end(),
+    [](const std::pair<int, Feature::Ptr> &a, const std::pair<int, Feature::Ptr> &b){
+        return a.first > b.first;
+    });
+    //清除原来的feat
+    current_frame_->features_left_.clear();
+    //重新塞
+    for (auto &it : cnt_pts_id) {
+        if (mask_for_redu_feat.at<uchar>(it.second->position_.pt) == 255) {
+            // opencv函数，把周围一个圆内全部置0,这个区域不允许别的特征点存在，避免特征点过于集中
+            cv::circle(mask_for_redu_feat, it.second->position_.pt, MIN_DIS, 0, -1);
+            num_good_pts++;
+            current_frame_->features_left_.push_back(it.second);
+            if ( it.second->map_point_.lock()) {
+                num_match_mpts++;
+            }
         }
     }
 
     #if DEBUG
+    // draw optical tracker result
+    std::vector<cv::Point2f> Last_kps_pt, Current_kps_pt;
+    std::vector<int> Last_frame_matched_index;
+    std::vector<int> Cur_frame_matched_index;
+    int cnt_match = 0;
+    cnt_match = FindMatch(last_frame_, current_frame_, 
+        Last_kps_pt, Current_kps_pt,
+        Last_frame_matched_index, Cur_frame_matched_index);
+    for (size_t i = 0; i < Current_kps_pt.size(); i++)
+    {
+        double len = std::min(1.0, 1.0 * current_frame_->features_left_[Cur_frame_matched_index[i]]->track_cnt / 7);
+        cv::circle(kp_im_show, Current_kps_pt.at(i), 3, cv::Scalar(255 * (1 - len), 0, 255 * len), cv::FILLED); //BGR
+        cv::line(kp_im_show, Last_kps_pt.at(i), Current_kps_pt.at(i), cv::Scalar(0, 255, 0), 1);
+    }
     LOG(INFO) << "光流匹配到 " << num_good_pts << " 图像特征点." 
             << " 另外匹配到 " << num_match_mpts << " 个地图点.";
     cv::imshow("kp_im_show",kp_im_show);
-    // cv::waitKey(0);
     #endif
+    
+    // step 5 detect new feature point
+    if(num_good_pts < 150) {
+        DetectFeatures();
+    }
 
     return num_good_pts;
 }
@@ -322,26 +367,28 @@ bool Frontend::StereoInit() {
         LOG(INFO) << "StereoInit Sccuess!";
         return true;
     }
+    LOG(INFO) << "StereoInit failed!";
     return false;
 }
 
 int Frontend::DetectFeatures() {
     cv::Mat mask(current_frame_->left_img_.size(), CV_8UC1, 255);
     for (auto &feat : current_frame_->features_left_) {
-        // cv::rectangle(mask, feat->position_.pt - cv::Point2f(20, 20),
-        //               feat->position_.pt + cv::Point2f(20, 20), 0, CV_FILLED);
-        cv::circle(mask, feat->position_.pt, 20, 0, cv::FILLED);
+        cv::circle(mask, feat->position_.pt, MIN_DIS, 0, cv::FILLED);
     }
 
     std::vector<cv::Point2f> keypoints;
     // gftt_->detect(current_frame_->left_img_, keypoints, mask);
     Eigen::Vector2d th(20,10);
     GridFastDetector(current_frame_->left_img_, keypoints, mask, th, 40);
+    //
     int cnt_detected = 0;
     for (auto &kp : keypoints) {
         cv::KeyPoint kp_tmp(kp, 7);
-        current_frame_->features_left_.push_back(
-            Feature::Ptr(new Feature(current_frame_, kp_tmp)));
+        Feature::Ptr feature_new = Feature::CreateFeature();
+        feature_new->frame_ = current_frame_;
+        feature_new->position_ = kp_tmp;
+        current_frame_->features_left_.push_back(feature_new);
         cnt_detected++;
     }
     LOG(INFO) << "Detect " << cnt_detected << " new features";
@@ -424,24 +471,23 @@ void Frontend::GridFastDetector(
     // cv::waitKey(0);
 }
 
-
+// use LK flow to estimate points in the right image
 int Frontend::FindFeaturesInRight() {
-    // use LK flow to estimate points in the right image
     std::vector<cv::Point2f> kps_left, kps_right;
     for (auto &kp : current_frame_->features_left_) {
         kps_left.push_back(kp->position_.pt);
-        auto mp = kp->map_point_.lock();
-        if (mp) {
-            // use projected points as initial guess
-            auto px =
-                camera_right_->world2pixel(mp->pos_, current_frame_->Pose());
-            kps_right.push_back(cv::Point2f(px[0], px[1]));
-        } else {
-            // use same pixel in left iamge
-            kps_right.push_back(kp->position_.pt);
-        }
+        kps_right.push_back(kp->position_.pt);
+        // auto mp = kp->map_point_.lock();
+        // if (mp) {
+        //     // use projected points as initial guess
+        //     auto px = camera_right_->world2pixel(mp->pos_, current_frame_->Pose());
+        //     kps_right.push_back(cv::Point2f(px[0], px[1]));
+        // } else {
+        //     // use same pixel in left iamge
+        //     kps_right.push_back(kp->position_.pt);
+        // }
     }
-
+    printf("step1.\n");
     std::vector<uchar> status;
     Mat error;
     cv::calcOpticalFlowPyrLK(
@@ -533,6 +579,36 @@ bool Frontend::BuildInitMap() {
     }
 
     return true;
+}
+
+//功能：找任意两帧之间的匹配点（或者说共视点），咳咳，注意特征点多的放img1
+//参数：（上一帧，当前帧，上一帧特征点位置，当前帧特征点位置，上一帧特征点下标, 是否是正常匹配模式）如果为false,则是找新地图点
+//返回：匹配点个数
+int Frontend::FindMatch(const Frame::Ptr &image_last, const Frame::Ptr &image_cur,
+    std::vector<cv::Point2f> &imgLast_feat_pt, std::vector<cv::Point2f> &imgCur_feat_pt, 
+    std::vector<int> &imgLast_matched_index, std::vector<int> &imgCur_matched_index,
+    bool is_find_mappoint)
+{
+    int match_cnt = 0;
+    for (int i = 0; i < image_cur->features_left_.size(); i++){
+        if ( image_cur->features_left_[i]->map_point_.lock() && is_find_mappoint) { 
+            continue; // 当前的特征点已经关联地图点
+        }
+        else
+        {
+            for (int j = 0; j < image_last->features_left_.size(); j++) {
+                if (image_cur->features_left_[i]->id_ == image_last->features_left_[j]->id_) {
+                    imgLast_feat_pt.emplace_back(image_last->features_left_[j]->position_.pt);
+                    imgCur_feat_pt.emplace_back(image_cur->features_left_[i]->position_.pt);
+                    imgLast_matched_index.emplace_back(j);
+                    imgCur_matched_index.emplace_back(i);
+                    match_cnt++;
+                    break;
+                }
+            }
+        }
+    }
+    return match_cnt;
 }
 
 bool Frontend::Reset() {

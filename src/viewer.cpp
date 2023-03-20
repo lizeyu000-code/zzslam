@@ -10,6 +10,11 @@
 
 namespace myslam {
 
+const float blue[3] = {0, 0, 1};
+const float green[3] = {0, 1, 0};
+const float red[3] = {1.0, 0, 0};
+const float black[3] = {0, 0, 0};
+
 Viewer::Viewer() {
     viewer_thread_ = std::thread(std::bind(&Viewer::ThreadLoop, this));
 }
@@ -29,6 +34,8 @@ void Viewer::UpdateMap() {
     assert(map_ != nullptr);
     active_keyframes_ = map_->GetActiveKeyFrames();
     active_landmarks_ = map_->GetActiveMapPoints();
+    all_keyframes_ = map_->GetAllKeyFrames();
+    all_landmarks_ = map_->GetAllMapPoints();
     map_updated_ = true;
 }
 
@@ -47,9 +54,6 @@ void Viewer::ThreadLoop() {
         pangolin::CreateDisplay()
             .SetBounds(0.0, 1.0, 0.0, 1.0, -1024.0f / 768.0f)
             .SetHandler(new pangolin::Handler3D(vis_camera));
-
-    const float blue[3] = {0, 0, 1};
-    const float green[3] = {0, 1, 0};
 
     while (!pangolin::ShouldQuit() && viewer_running_) {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -97,7 +101,7 @@ void Viewer::FollowCurrentFrame(pangolin::OpenGlRenderState& vis_camera) {
 
 void Viewer::DrawFrame(Frame::Ptr frame, const float* color) {
     SE3 Twc = frame->Pose().inverse();
-    const float sz = 1.0;
+    const float sz = 0.5;
     const int line_width = 2.0;
     const float fx = 400;
     const float fy = 400;
@@ -144,17 +148,25 @@ void Viewer::DrawFrame(Frame::Ptr frame, const float* color) {
 }
 
 void Viewer::DrawMapPoints() {
-    const float red[3] = {1.0, 0, 0};
-    const float black[3] = {0, 0, 0};
     for (auto& kf : active_keyframes_) {
-        DrawFrame(kf.second, red);
+        DrawFrame(kf.second, blue);
     }
 
+    // draw all landmarks
+    glPointSize(2);
+    glBegin(GL_POINTS);
+    for (auto& landmark : all_landmarks_) {
+        auto pos = landmark.second->Pos();
+        glColor3f(black[0], black[1], black[2]);
+        glVertex3d(pos[0], pos[1], pos[2]);
+    }
+    glEnd();
+    // draw active landmarks
     glPointSize(3);
     glBegin(GL_POINTS);
     for (auto& landmark : active_landmarks_) {
         auto pos = landmark.second->Pos();
-        glColor3f(black[0], black[1], black[2]);
+        glColor3f(red[0], red[1], red[2]);
         glVertex3d(pos[0], pos[1], pos[2]);
     }
     glEnd();

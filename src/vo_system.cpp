@@ -2,9 +2,8 @@
 // Created by huws on 23-03-19.
 //
 #include "vo_system.h"
-#include <opencv2/calib3d.hpp>
+#include <opencv2/opencv.hpp>
 #include <opencv2/core/eigen.hpp>
-#include <opencv2/highgui.hpp>
 #include <chrono>
 
 namespace myslam {
@@ -56,19 +55,19 @@ SE3 VisualOdometry::TrackStereo(Multi_Sensor_Data data_input_)
     cv::Mat left_image_undistored, right_image_undistored;
     //去畸变
     if (0) {
-        // remap(data_input_.left_img, left_image_undistored, map1, map2, cv::INTER_LINEAR);  
-        // remap(data_input_.right_img, right_image_undistored, map1, map2, cv::INTER_LINEAR); 
+        remap(data_input_.left_img, left_image_undistored, map1, map2, cv::INTER_LINEAR);  
+        remap(data_input_.right_img, right_image_undistored, map1, map2, cv::INTER_LINEAR); 
     }else{
         left_image_undistored = data_input_.left_img.clone();
         right_image_undistored = data_input_.right_img.clone();
     }
 
     //图像锐化
-    // if(0){
-    //     cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
-	//     clahe->apply(left_image_undistored, left_image_undistored);  
-    //     clahe->apply(right_image_undistored, right_image_undistored);  
-    // }
+    if(0){
+        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
+	    clahe->apply(left_image_undistored, left_image_undistored);  
+        clahe->apply(right_image_undistored, right_image_undistored);  
+    }
 
     // 创建帧
     auto new_frame = Frame::CreateFrame();
@@ -122,9 +121,9 @@ bool VisualOdometry::ParameterSet()
     cv::eigen2cv(cameras_[0]->K() , cv_K);
     cv::eigen2cv(cameras_[0]->D() , cv_D);
 
-    // cv::Size imageSize(img_col, img_row);
-    // NewCameraMatrix = getOptimalNewCameraMatrix(cv_K, cv_D, imageSize, alpha, imageSize, 0);
-    // cv::initUndistortRectifyMap(cv_K, cv_D, cv::Mat(), NewCameraMatrix, imageSize, CV_16SC2, map1, map2);
+    cv::Size imageSize(img_col, img_row);
+    NewCameraMatrix = getOptimalNewCameraMatrix(cv_K, cv_D, imageSize, alpha, imageSize, 0);
+    initUndistortRectifyMap(cv_K, cv_D, cv::Mat(), NewCameraMatrix, imageSize, CV_16SC2, map1, map2);
 
     std::cout<< "camera k is: " << cv_K << std::endl;
     std::cout<< "camera d is: " << cv_D << std::endl;
@@ -134,7 +133,6 @@ bool VisualOdometry::ParameterSet()
     printf("Parameter Set success. \n");
     return true;
 } 
-
 
 // void VisualOdometry::Run() {
 //     while (1) {
@@ -159,6 +157,5 @@ bool VisualOdometry::ParameterSet()
 //     LOG(INFO) << "VO cost time: " << time_used.count() << " seconds.";
 //     return success;
 // }
-
 
 }  // namespace myslam

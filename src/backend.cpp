@@ -73,7 +73,9 @@ void Backend::Optimize(Map::KeyframesType &keyframes,
     // K 和左右外参
     Mat33 K = cam_left_->K();
     SE3 left_ext = cam_left_->pose();
-    SE3 right_ext = cam_right_->pose();
+    // SE3 right_ext = cam_right_->pose();
+    Eigen::Vector3d t = Eigen::Vector3d(-0.53717, 0, 0);
+    SE3 right_ext = SE3(SO3(),t);
 
     // edges
     int index = 1;

@@ -38,6 +38,9 @@ struct Feature {
 
     Feature(std::shared_ptr<Frame> frame, const cv::KeyPoint &kp)
         : frame_(frame), position_(kp) {}
+    
+    /// 工厂构建模式，分配id 
+    static Feature::Ptr CreateFeature();
 };
 }  // namespace myslam
 

@@ -104,6 +104,10 @@ class Frontend {
      */
     int FindFeaturesInRight();
 
+    int FindMatch(const Frame::Ptr &image_last, const Frame::Ptr &image_cur,
+        std::vector<cv::Point2f> &imgLast_feat_pt, std::vector<cv::Point2f> &imgCur_feat_pt, 
+        std::vector<int> &imgLast_matched_index, std::vector<int> &imgCur_matched_index,
+        bool is_find_mappoint = false);
     /**
      * Build the initial map with single image
      * @return true if succeed
@@ -143,6 +147,7 @@ class Frontend {
     int num_features_tracking_ = 50;
     int num_features_tracking_bad_ = 20;
     int num_features_needed_for_keyframe_ = 80;
+    const int MIN_DIS = 25;
 
     // utilities
     // cv::Ptr<cv::GFTTDetector> gftt_;  // feature detector in opencv
