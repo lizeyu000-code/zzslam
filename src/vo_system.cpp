@@ -45,9 +45,9 @@ SE3 VisualOdometry::TrackStereo(Multi_Sensor_Data data_input_)
 {
     TicToc t1;
     // check data 
-    if (data_input_.left_img.data == nullptr 
-        || data_input_.right_img.data == nullptr) {
-        std::cerr << "left or right image is empty!!! please check." << std::endl;
+    if (data_input_.left_img.empty() ||
+        data_input_.right_img.empty()) {
+        LOG(ERROR) << "left or right image is empty!!!";
         SE3 empty_pose;
         return empty_pose;
     }
@@ -94,24 +94,24 @@ bool VisualOdometry::ParameterSet()
     
     Mat33 K;
     K.setIdentity();
-    fsSettings["camera.fx"] >> K(0, 0);
-    fsSettings["camera.fy"] >> K(1, 1);
-    fsSettings["camera.cx"] >> K(0, 2);
-    fsSettings["camera.cy"] >> K(1, 2);
+    fsSettings["Camera.fx"] >> K(0, 0);
+    fsSettings["Camera.fy"] >> K(1, 1);
+    fsSettings["Camera.cx"] >> K(0, 2);
+    fsSettings["Camera.cy"] >> K(1, 2);
 
     double k1,k2,p1,p2,k3;
-    fsSettings["camera.k1"] >> k1;
-    fsSettings["camera.k2"] >> k2;
-    fsSettings["camera.p1"] >> p1;
-    fsSettings["camera.p2"] >> p2;
-    fsSettings["camera.k3"] >> k3;
+    fsSettings["Camera.k1"] >> k1;
+    fsSettings["Camera.k2"] >> k2;
+    fsSettings["Camera.p1"] >> p1;
+    fsSettings["Camera.p2"] >> p2;
+    fsSettings["Camera.k3"] >> k3;
 
     double base_line;
-    fsSettings["camera.baseline"] >> base_line;
+    fsSettings["Camera.baseline"] >> base_line;
 
     int img_row, img_col;
-    fsSettings["image.width"] >> img_col;
-    fsSettings["image.height"] >> img_row;
+    fsSettings["Camera.width"] >> img_col;
+    fsSettings["Camera.height"] >> img_row;
 
     Camera::Ptr new_camera(new Camera(K(0, 0), K(1, 1), K(0, 2), K(1, 2), base_line));
     new_camera->set_D(k1, k2, p1, p2, k3);
@@ -125,9 +125,9 @@ bool VisualOdometry::ParameterSet()
     NewCameraMatrix = getOptimalNewCameraMatrix(cv_K, cv_D, imageSize, alpha, imageSize, 0);
     initUndistortRectifyMap(cv_K, cv_D, cv::Mat(), NewCameraMatrix, imageSize, CV_16SC2, map1, map2);
 
-    std::cout<< "camera k is: " << cv_K << std::endl;
-    std::cout<< "camera d is: " << cv_D << std::endl;
-    std::cout<< "camera baseline is: " << base_line << std::endl;
+    std::cout<< "Camera K is: " << cv_K << std::endl;
+    std::cout<< "Camera D is: " << cv_D << std::endl;
+    std::cout<< "Camera baseline is: " << base_line << std::endl;
 
     fsSettings.release();
     printf("Parameter Set success. \n");

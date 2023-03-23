@@ -2,30 +2,30 @@
 # data
 # the tum dataset directory, change it to yours! 
 # dataset_dir: /media/xiang/Data/Dataset/Kitti/dataset/sequences/00
-dataset_dir: /mnt/1A9286BD92869CBF/Dataset/Kitti/dataset/sequences/05
+# dataset_dir: /mnt/1A9286BD92869CBF/Dataset/Kitti/dataset/sequences/05
 
 # image size
-image.width: 1241
-image.height: 376
+Camera.width: 1241
+Camera.height: 376
 # camera intrinsics
 #
-camera.fx: 718.856000
-camera.fy: 718.856000
-camera.cx: 607.192800
-camera.cy: 185.215700
+Camera.fx: 718.856000
+Camera.fy: 718.856000
+Camera.cx: 607.192800
+Camera.cy: 185.215700
 #
 # camera.fx: 517.3
 # camera.fy: 516.5
 # camera.cx: 325.1
 # camera.cy: 249.7
 #
-camera.k1: 0
-camera.k2: 0
-camera.p1: 0
-camera.p2: 0
-camera.k3: 0
+Camera.k1: 0
+Camera.k2: 0
+Camera.p1: 0
+Camera.p2: 0
+Camera.k3: 0
 #
-camera.baseline: 0.53717
+Camera.baseline: 0.53717
 #
 num_features: 150
 num_features_init: 50

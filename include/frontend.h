@@ -140,6 +140,7 @@ class Frontend {
     SE3 relative_motion_;  // 当前帧与上一帧的相对运动，用于估计当前帧pose初值
 
     int tracking_inliers_ = 0;  // inliers, used for testing new keyframes
+    int num_match_mpts = 0;
 
     // params
     int num_features_ = 200;

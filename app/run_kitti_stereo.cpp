@@ -72,13 +72,13 @@ int main(int argc, char **argv)
 
         SE3 tcw_now = vo->TrackStereo(data_input);
 
-        int k = cv::waitKey(0);
+        int k = cv::waitKey(50);
         if (k==27)
             break;
         
     }
 
-
+    LOG(INFO) << "the dataset is run out.";
     // myslam::VisualOdometry::Ptr vo(
     //     new myslam::VisualOdometry(FLAGS_config_file));
     // assert(vo->Init() == true);

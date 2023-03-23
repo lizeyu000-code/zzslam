@@ -1,6 +1,7 @@
 //
-// Created by gaoxiang on 19-5-4.
+// Created by huws on 23-03-20.
 //
+
 #include "viewer.h"
 #include "feature.h"
 #include "frame.h"
@@ -70,6 +71,11 @@ void Viewer::ThreadLoop() {
             // cv::waitKey(1);
         }
 
+        // if (current_frame_->is_keyframe_)
+        // {
+        //     all_kf_pose.emplace_back(current_frame_->Pose().inverse());
+        // }
+        
         if (map_) {
             DrawMapPoints();
         }
@@ -101,7 +107,7 @@ void Viewer::FollowCurrentFrame(pangolin::OpenGlRenderState& vis_camera) {
 
 void Viewer::DrawFrame(Frame::Ptr frame, const float* color) {
     SE3 Twc = frame->Pose().inverse();
-    const float sz = 0.5;
+    const float sz = 0.2;
     const int line_width = 2.0;
     const float fx = 400;
     const float fy = 400;
@@ -148,8 +154,11 @@ void Viewer::DrawFrame(Frame::Ptr frame, const float* color) {
 }
 
 void Viewer::DrawMapPoints() {
+    // for (auto& kf : all_keyframes_) {
+    //     DrawFrame(kf.second, blue);
+    // }
     for (auto& kf : active_keyframes_) {
-        DrawFrame(kf.second, blue);
+        DrawFrame(kf.second, red);
     }
 
     // draw all landmarks
@@ -162,7 +171,7 @@ void Viewer::DrawMapPoints() {
     }
     glEnd();
     // draw active landmarks
-    glPointSize(3);
+    glPointSize(2);
     glBegin(GL_POINTS);
     for (auto& landmark : active_landmarks_) {
         auto pos = landmark.second->Pos();

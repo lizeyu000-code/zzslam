@@ -48,8 +48,14 @@ bool Frontend::Track() {
         current_frame_->SetPose(relative_motion_ * last_frame_->Pose());
     }
 
+    num_match_mpts = 0;
+    tracking_inliers_ = 0;
+
     int num_track_last = TrackLastFrame();
-    tracking_inliers_ = EstimateCurrentPose();
+    if (num_match_mpts > 15) {
+        tracking_inliers_ = EstimateCurrentPose();
+    }
+    
     //
     LOG(INFO) << "tracking_inliers_ is : " << tracking_inliers_;
     //
@@ -60,8 +66,9 @@ bool Frontend::Track() {
         // tracking bad
         status_ = FrontendStatus::TRACKING_BAD;
     } else {
+        status_ = FrontendStatus::TRACKING_BAD;
         // lost
-        status_ = FrontendStatus::LOST;
+        // status_ = FrontendStatus::LOST;
     }
 
     InsertKeyframe();
@@ -88,7 +95,6 @@ bool Frontend::InsertKeyframe() {
     DetectFeatures();  
     // track in right image
     FindFeaturesInRight();
-
     // triangulate map points
     TriangulateNewPoints();
     // update backend because we have a new keyframe
@@ -123,7 +129,7 @@ int Frontend::TriangulateNewPoints() {
             //              current_frame_->features_right_[i]->position_.pt.y))};
             float disparity = current_frame_->features_left_[i]->position_.pt.x -
                     current_frame_->features_right_[i]->position_.pt.x;
-            if (disparity < 3) {
+            if (disparity < 2) {
                 continue;
             }
             double depth = camera_left_->fx_ * camera_left_->baseline_ / disparity;
@@ -232,7 +238,7 @@ int Frontend::EstimateCurrentPose() {
     for (auto &feat : features) {
         if (feat->is_outlier_) {
             feat->map_point_.reset();
-            feat->is_outlier_ = false;  // maybe we can still use it in future
+            // feat->is_outlier_ = false;  // maybe we can still use it in future
         }
     }
     return features.size() - cnt_outlier;
@@ -278,7 +284,7 @@ int Frontend::TrackLastFrame() {
 
     // step 3 
     int num_good_pts = 0;
-    int num_match_mpts = 0;
+    // int num_match_mpts = 0;
     cv::Mat kp_im_show = current_frame_->left_img_.clone();
     cv::cvtColor(kp_im_show, kp_im_show, cv::COLOR_GRAY2BGR);
     for (size_t i = 0; i < status.size(); ++i) {
@@ -379,7 +385,7 @@ int Frontend::DetectFeatures() {
 
     std::vector<cv::Point2f> keypoints;
     // gftt_->detect(current_frame_->left_img_, keypoints, mask);
-    Eigen::Vector2d th(20,10);
+    Eigen::Vector2d th(25, 10);
     GridFastDetector(current_frame_->left_img_, keypoints, mask, th, 40);
     //
     int cnt_detected = 0;
@@ -487,7 +493,7 @@ int Frontend::FindFeaturesInRight() {
         //     kps_right.push_back(kp->position_.pt);
         // }
     }
-    printf("step1.\n");
+
     std::vector<uchar> status;
     Mat error;
     cv::calcOpticalFlowPyrLK(
@@ -520,6 +526,25 @@ int Frontend::FindFeaturesInRight() {
             current_frame_->features_right_.push_back(nullptr);
         }
     }
+
+    #if DEBUG
+    //show stereo match result
+    // cv::Mat stereo_match_show = current_frame_->right_img_.clone();
+    // cv::cvtColor(stereo_match_show, stereo_match_show, cv::COLOR_GRAY2BGR);
+    // for(size_t i = 0; i < current_frame_->features_right_.size(); ++i) {
+    //     if (current_frame_->features_right_[i] != nullptr)
+    //     {
+    //         cv::circle(stereo_match_show,
+    //             current_frame_->features_right_[i]->position_.pt,
+    //             3, cv::Scalar(0,0,255), -1);
+    //         cv::line(stereo_match_show, 
+    //         current_frame_->features_right_[i]->position_.pt,
+    //         current_frame_->features_left_[i]->position_.pt,
+    //         cv::Scalar(0,255,0),2, -1);
+    //     }
+    // }
+    // cv::imshow("stereo_match_show", stereo_match_show);
+    #endif
     LOG(INFO) << "Find " << num_good_pts << " in the right image.";
     return num_good_pts;
 }
@@ -542,7 +567,7 @@ bool Frontend::BuildInitMap() {
         float disparity = current_frame_->features_left_[i]->position_.pt.x -
                             current_frame_->features_right_[i]->position_.pt.x;
 
-        if (disparity < 3) {
+        if (disparity < 2) {
             continue;
         }
         
@@ -565,15 +590,17 @@ bool Frontend::BuildInitMap() {
             map_->InsertMapPoint(new_map_point);
         }
     }
-
+    LOG(INFO) << "Initial map created with " << cnt_init_landmarks << " map points";
     // 
     if (cnt_init_landmarks > 80) {
         current_frame_->SetKeyFrame();
         map_->InsertKeyFrame(current_frame_);
         // backend_->UpdateMap();
-        LOG(INFO) << "Initial map created with " << cnt_init_landmarks << " map points";
+        // LOG(INFO) << "Initial map created with " << cnt_init_landmarks << " map points";
+        LOG(INFO) << "Initial map success!";
     }
     else {
+        map_->RetMap();
         LOG(INFO) << "Initial map failed!";
         return false;
     }
