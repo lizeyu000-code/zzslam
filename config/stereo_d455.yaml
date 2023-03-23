@@ -1,0 +1,52 @@
+%YAML:1.0
+
+#--------------------------------------------------------------------------------------------
+# Camera Parameters. Adjust them!
+#--------------------------------------------------------------------------------------------
+Camera.type: "PinHole"
+
+# Camera calibration and distortion parameters (OpenCV) 
+Camera.fx: 428.3537922602939
+Camera.fy: 428.3201454661401
+Camera.cx: 422.67752703029004
+Camera.cy: 236.60599791251943
+
+Camera.k1: 0.0
+Camera.k2: 0.0
+Camera.p1: 0.0
+Camera.p2: 0.0
+Camera.k3: 0.0
+
+# Camera.bFishEye: 0
+
+Camera.width: 848
+Camera.height: 480
+
+# Camera frames per second 
+Camera.fps: 30.0
+
+# stereo baseline times fx
+# Camera.bf: 40.788894
+Camera.baseline: 0.095
+
+# Color order of the images (0: BGR, 1: RGB. It is ignored if images are grayscale)
+# Camera.RGB: 1
+
+# Close/Far threshold. Baseline times.
+ThDepth: 40.0
+
+
+#--------------------------------------------------------------------------------------------
+# Other Parameters
+#--------------------------------------------------------------------------------------------
+num_features: 150
+num_features_init: 50
+num_features_tracking: 50
+
+scaleFactor: 1.2
+nLevels: 8
+
+iniThFAST: 25
+minThFAST: 10
+
+
