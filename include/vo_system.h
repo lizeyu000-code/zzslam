@@ -19,7 +19,7 @@ struct Multi_Sensor_Data{
     cv::Mat right_img;
     // Eigen::Vector4d GPS_Pose;  // x, y, z, confidence
     SE3 Wheel_Odom_data;
-    Vec9 Imu_Data;
+    Vec9 Imu_Data;  // pitch roll yaw acc_x acc_y acc_z gyro_x gyro_y gyro_z
 };
 
 /**

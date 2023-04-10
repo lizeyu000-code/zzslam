@@ -27,8 +27,10 @@ int FindFeaturesInRight(
     std::vector<cv::Point2f>& kps_right
     );
 
-double SSD(const cv::Mat& img0_input, const cv::Mat& img1_input, 
-    const cv::Point2f& pt_ref, const cv::Point2f& pt_cur);
+int SSD(const cv::Mat& left_image_input, 
+    const cv::Mat& right_image_input, 
+    std::vector<cv::Point2f>& kps_left,
+    std::vector<cv::Point2f>& kps_right); 
 
 int main(int argc, char **argv) 
 {
@@ -39,15 +41,23 @@ int main(int argc, char **argv)
     
     cv::Mat left_img, right_img;
     left_img = cv::imread(string(argv[1]), cv::IMREAD_GRAYSCALE);
-    right_img = cv::imread(string(argv[1]), cv::IMREAD_GRAYSCALE);
+    right_img = cv::imread(string(argv[2]), cv::IMREAD_GRAYSCALE);
 
-    std::vector<cv::Point2f> fpts;
+    std::vector<cv::Point2f> left_fpts;
+    std::vector<cv::Point2f> right_fpts;
     Eigen::Vector2d th(25, 10);
     cv::Mat mask;
-    GridFastDetector(left_img, fpts, mask, th, 40);
+    mask.create(left_img.rows, left_img.cols, CV_8UC1);
+    mask.setTo(0);
+    cv::rectangle(mask, cv::Point2f(10,10), cv::Point2f(left_img.cols-10, left_img.rows-10), 255, -1);
+    cv::imshow("mask",mask);
+    GridFastDetector(left_img, left_fpts, mask, th, 40);
 
+    // SSD(left_img, right_img, left_fpts, right_fpts);
+    // right_fpts.clear();
+    FindFeaturesInRight(left_img, right_img, left_fpts, right_fpts);
 
-
+    cv::waitKey(0);
     return 0;
 }
 
@@ -60,7 +70,7 @@ int FindFeaturesInRight(
     ) {
     // 光流匹配
     for (auto &kp : kps_left) {
-        kps_left.push_back(kp);
+        // kps_left.push_back(kp);
         kps_right.push_back(kp);
         // auto mp = kp->map_point_.lock();
         // if (mp) {
@@ -119,45 +129,80 @@ int FindFeaturesInRight(
         }
     }
     cv::imshow("stereo_match_show", stereo_match_show);
+    cv::imshow("right img",right_image_input);
     LOG(INFO) << "Find " << num_good_pts << " in the right image.";
 
+    return num_good_pts;
+}
 
-    // SSD 匹配
-    double best_ssd = 999;
-    cv::Point2f best_px_cur;
-    int dmax = 128;
-    std::vector<bool> status1;
+// SSD 匹配
+int SSD(const cv::Mat& left_image_input, 
+    const cv::Mat& right_image_input, 
+    std::vector<cv::Point2f>& kps_left,
+    std::vector<cv::Point2f>& kps_right) 
+{
+    
+    int num_good_pts = 0;
+    //show stereo match result
+    cv::Mat stereo_match_show;
+    cv::cvtColor(left_image_input, stereo_match_show, cv::COLOR_GRAY2BGR);
+
+
+    int dmax = 64;
+    std::vector<bool> status;
+    int WINDOW_SIZE = 8;
     // 遍历所有特征点
     for (int i = 0; i < kps_left.size(); ++i)
     {
+        Mat patchL = left_image_input(cv::Rect(kps_left[i].x - WINDOW_SIZE, kps_left[i].y - WINDOW_SIZE, 2*WINDOW_SIZE, 2*WINDOW_SIZE));
+        // cv::circle(stereo_match_show, kps_left[i], 1, cv::Scalar(0,255,0),-1);
+        // cv::rectangle(stereo_match_show, 
+        //     cv::Point2f(kps_left[i].x - WINDOW_SIZE, kps_left[i].y - WINDOW_SIZE),
+        //     cv::Point2f(kps_left[i].x + WINDOW_SIZE, kps_left[i].y + WINDOW_SIZE),
+        //     cv::Scalar(0,0,255), 1);
+        // cv::imshow("stereo_match_show", stereo_match_show);
+        // cv::imshow("patchL",patchL);
+
+        double best_ssd = 99999;
+        cv::Point2f best_px_cur;
         //沿着极线进行SSD搜索
-        for (int j = kps_left[i].x - dmax; j < kps_left[i].x + dmax; j++)
+        for (int d = 0 ; d < dmax ; d++)
         {
-            cv::Point2f tmp_pt(kps_left[i].y, j);
-            double ssd = SSD(left_image_input, right_image_input, kps_left[i], tmp_pt);
+            int search_x = kps_left[i].x - d;
+            if (search_x < 1+WINDOW_SIZE) continue;
+            cv::Point2f tmp_pt(search_x, kps_left[i].y);
+            Mat patchR = right_image_input(cv::Rect(search_x - WINDOW_SIZE, kps_left[i].y - WINDOW_SIZE, 2*WINDOW_SIZE, 2*WINDOW_SIZE));
+            double ssd = (patchL - patchR).dot(patchL - patchR);
             if (ssd < best_ssd)
             {
                 best_ssd = ssd;
                 best_px_cur = tmp_pt;
             }
         }
-        if (best_ssd < 0.15) {
-            status1[i] = true;
+        //
+        printf("best_ssd is : %f. \n", best_ssd);
+        kps_right.emplace_back(best_px_cur);
+        if (best_ssd < 999) {
+            status.push_back(true);
         }
         else{
-            status1[i] = false;
+            status.push_back(false);
+        }
+
+        // cv::waitKey(0);
+    }
+    
+    for(size_t i = 0; i < kps_left.size(); ++i) {
+        if (status[i])
+        {
+            cv::circle(stereo_match_show, kps_left[i], 2, cv::Scalar(0,0,255), -1);
+            cv::line(stereo_match_show, kps_left[i], kps_right[i], cv::Scalar(0,255,0), 2, -1);
+            num_good_pts++;
         }
     }
+    cv::imshow("stereo_ssd_match_show", stereo_match_show);
 
-    
     return num_good_pts;
-}
-
-//
-double SSD(const cv::Mat& img0_input, const cv::Mat& img1_input, 
-    const cv::Point2f& pt_ref, const cv::Point2f& pt_cur) 
-{
-
 }
 
 
@@ -233,7 +278,7 @@ void GridFastDetector(
     for (size_t i = 0; i < kps.size(); i++) {
         cv::circle(img_show, kps[i], 2, cv::Scalar(0,255,0), -1);
     }
-    cv::imshow("tracked ", img_show);
+    // cv::imshow("tracked ", img_show);
     // cv::waitKey(0);
 }
 

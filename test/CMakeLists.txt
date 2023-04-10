@@ -10,3 +10,6 @@
 add_executable(test_triangulation test_triangulation.cpp)
 target_link_libraries(test_triangulation zzslam ${THIRD_PARTY_LIBS})
 
+# add_executable(sparse_ssd_match sparse_ssd_match.cpp)
+# target_link_libraries(test_triangulation zzslam ${THIRD_PARTY_LIBS})
+
