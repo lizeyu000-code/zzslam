@@ -107,7 +107,7 @@ void Viewer::FollowCurrentFrame(pangolin::OpenGlRenderState& vis_camera) {
 
 void Viewer::DrawFrame(Frame::Ptr frame, const float* color) {
     SE3 Twc = frame->Pose().inverse();
-    const float sz = 0.2;
+    const float sz = 0.1;
     const int line_width = 2.0;
     const float fx = 400;
     const float fy = 400;
@@ -154,9 +154,9 @@ void Viewer::DrawFrame(Frame::Ptr frame, const float* color) {
 }
 
 void Viewer::DrawMapPoints() {
-    // for (auto& kf : all_keyframes_) {
-    //     DrawFrame(kf.second, blue);
-    // }
+    for (auto& kf : all_keyframes_) {
+        DrawFrame(kf.second, blue);
+    }
     for (auto& kf : active_keyframes_) {
         DrawFrame(kf.second, red);
     }
@@ -171,14 +171,14 @@ void Viewer::DrawMapPoints() {
     }
     glEnd();
     // draw active landmarks
-    glPointSize(2);
-    glBegin(GL_POINTS);
-    for (auto& landmark : active_landmarks_) {
-        auto pos = landmark.second->Pos();
-        glColor3f(red[0], red[1], red[2]);
-        glVertex3d(pos[0], pos[1], pos[2]);
-    }
-    glEnd();
+    // glPointSize(2);
+    // glBegin(GL_POINTS);
+    // for (auto& landmark : active_landmarks_) {
+    //     auto pos = landmark.second->Pos();
+    //     glColor3f(red[0], red[1], red[2]);
+    //     glVertex3d(pos[0], pos[1], pos[2]);
+    // }
+    // glEnd();
 }
 
 }  // namespace myslam

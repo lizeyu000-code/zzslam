@@ -54,6 +54,8 @@ class Frontend {
      */
     bool Track();
 
+    bool inBorder(const cv::Point2f &pt);
+
     /**
      * Reset when lost
      * @return true if success

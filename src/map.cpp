@@ -53,8 +53,8 @@ void Map::RemoveOldKeyframe() {
     double max_dis = 0, min_dis = 9999;
     double max_kf_id = 0, min_kf_id = 0;
     auto Twc = current_frame_->Pose().inverse();
-    Vec6 weight;
-    weight << 4.5, 4.5, 4.5, 1.0, 1.0, 1.0;
+    // Vec6 weight;
+    // weight << 4.0, 4.0, 4.0, 1.0, 1.0, 1.0;
     for (auto& kf : active_keyframes_) {
         if (kf.second == current_frame_) continue;
         // Vec6 dis_tmp = (kf.second->Pose() * Twc).log();

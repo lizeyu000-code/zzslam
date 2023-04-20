@@ -21,6 +21,16 @@ Frontend::Frontend() {
     // num_features_ = Config::Get<int>("num_features");
 }
 
+bool Frontend::inBorder(const cv::Point2f &pt)
+{
+    int col = current_frame_->left_img_.cols;
+    int row = current_frame_->left_img_.rows;
+    const int BORDER_SIZE = 1;
+    int img_x = cvRound(pt.x);
+    int img_y = cvRound(pt.y);
+    return BORDER_SIZE <= img_x && img_x < col - BORDER_SIZE && BORDER_SIZE <= img_y && img_y < row - BORDER_SIZE;
+}
+
 SE3 Frontend::AddFrame(myslam::Frame::Ptr frame) {
     current_frame_ = frame;
 
@@ -247,8 +257,8 @@ int Frontend::EstimateCurrentPose() {
 // use LK flow to estimate points in the last image
 int Frontend::TrackLastFrame() {
     // Step 0 准备匹配点
-    LOG(INFO) << "现在开始追踪第 " << current_frame_->id_ <<" 帧." 
-                << "时间戳是" << current_frame_->time_stamp_;
+    LOG(INFO) << "Now tracking " << current_frame_->id_ <<" frame." 
+        << " And now stamp is" << current_frame_->time_stamp_;
     std::vector<cv::Point2f> kps_last, kps_current;
     for (auto &kp : last_frame_->features_left_) {
         // if (kp->map_point_.lock()) {
@@ -265,14 +275,16 @@ int Frontend::TrackLastFrame() {
     }
 
     // Step 1 计算光流
+    // TicToc t_1;
     std::vector<uchar> status;
     Mat error;
     cv::calcOpticalFlowPyrLK(
-        last_frame_->left_img_, current_frame_->left_img_, kps_last,
-        kps_current, status, error, cv::Size(21, 21), 3,
+        last_frame_->left_img_, current_frame_->left_img_, kps_last, kps_current, 
+        status, error, cv::Size(15, 15), 8,
         cv::TermCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 30, 0.01),
         cv::OPTFLOW_USE_INITIAL_FLOW);
-
+    // LOG(INFO) << "tracker calcOpticalFlowPyrLK cost : " << t_1.toc() << " ms.";
+    
     // Step 2 匹配点极限约束剔除outlier ,  opencv接口计算本质矩阵，某种意义也是一种对级约束的outlier剔除
     std::vector<uchar> status_2;
     cv::findFundamentalMat(kps_last, kps_current, cv::FM_RANSAC, 1.0, 0.99, status_2);
@@ -287,8 +299,8 @@ int Frontend::TrackLastFrame() {
     // int num_match_mpts = 0;
     cv::Mat kp_im_show = current_frame_->left_img_.clone();
     cv::cvtColor(kp_im_show, kp_im_show, cv::COLOR_GRAY2BGR);
-    for (size_t i = 0; i < status.size(); ++i) {
-        if (status[i]) {
+    for (size_t i = 0; i < status.size(); i++) {
+        if (status[i] && inBorder(kps_current[i])) {
             cv::KeyPoint kp(kps_current[i], 7);
             Feature::Ptr feature(new Feature(current_frame_, kp));
             feature->id_ = last_frame_->features_left_[i]->id_;  //把追踪到的上一帧特征点ID给到当前帧
@@ -306,7 +318,7 @@ int Frontend::TrackLastFrame() {
     cv::Mat mask_for_redu_feat(current_frame_->left_img_.size(), CV_8UC1, cv::Scalar(255));
     // 根据追踪次数给特征点重新排个序 , 利用光流特点，追踪多的稳定性好，排前面
     std::vector< std::pair<int, Feature::Ptr>> cnt_pts_id;
-    for (int i = 0; i < current_frame_->features_left_.size(); i++){
+    for (int i = 0; i < current_frame_->features_left_.size(); i++) {
         cnt_pts_id.push_back(std::make_pair(current_frame_->features_left_[i]->track_cnt, current_frame_->features_left_[i]));
     }
     sort(cnt_pts_id.begin(), cnt_pts_id.end(),
@@ -343,8 +355,8 @@ int Frontend::TrackLastFrame() {
         cv::circle(kp_im_show, Current_kps_pt.at(i), 3, cv::Scalar(255 * (1 - len), 0, 255 * len), cv::FILLED); //BGR
         cv::line(kp_im_show, Last_kps_pt.at(i), Current_kps_pt.at(i), cv::Scalar(0, 255, 0), 1);
     }
-    LOG(INFO) << "光流匹配到 " << num_good_pts << " 图像特征点." 
-            << " 另外匹配到 " << num_match_mpts << " 个地图点.";
+    LOG(INFO) << "CalcOpticalFlowPyrLK has tracked " << num_good_pts << " last frame feature point." 
+            << " And matchd " << num_match_mpts << " Map Point.";
     cv::imshow("kp_im_show",kp_im_show);
     #endif
     
@@ -384,9 +396,9 @@ int Frontend::DetectFeatures() {
     }
 
     std::vector<cv::Point2f> keypoints;
-    // gftt_->detect(current_frame_->left_img_, keypoints, mask);
-    Eigen::Vector2d th(25, 10);
+    Eigen::Vector2d th(20, 10);
     GridFastDetector(current_frame_->left_img_, keypoints, mask, th, 40);
+    // cv::goodFeaturesToTrack(current_frame_->left_img_, keypoints, 200 - current_frame_->features_left_.size(), 0.01, MIN_DIS, mask);
     //
     int cnt_detected = 0;
     for (auto &kp : keypoints) {
@@ -436,13 +448,8 @@ void Frontend::GridFastDetector(
                 continue;
             std::vector<cv::KeyPoint> vKeysCell;
             FAST(image_input.rowRange(iniY,maxY).colRange(iniX,maxX), vKeysCell, GaryThreshold(0), true); // 20
-            // cv::Ptr<cv::FastFeatureDetector> detector = cv::FastFeatureDetector::create(GaryThreshold(0), cv::FastFeatureDetector::THRESHOLD, cv::FastFeatureDetector::TYPE_9_16);
-            // detector -> detect(current_frame_->left_img_.rowRange(iniY,maxY).colRange(iniX,maxX), vKeysCell, mask);
 
-            if(vKeysCell.empty())
-            {
-                // cv::Ptr<cv::FastFeatureDetector> detector2 = cv::FastFeatureDetector::create(GaryThreshold(0), cv::FastFeatureDetector::THRESHOLD, cv::FastFeatureDetector::TYPE_9_16);
-                // detector2 -> detect(current_frame_->left_img_.rowRange(iniY,maxY).colRange(iniX,maxX), vKeysCell, mask);
+            if(vKeysCell.empty()) {
                 FAST(image_input.rowRange(iniY,maxY).colRange(iniX,maxX), vKeysCell, GaryThreshold(1), true); // 10
             }
 
@@ -498,7 +505,7 @@ int Frontend::FindFeaturesInRight() {
     Mat error;
     cv::calcOpticalFlowPyrLK(
         current_frame_->left_img_, current_frame_->right_img_, kps_left,
-        kps_right, status, error, cv::Size(21, 21), 3,
+        kps_right, status, error, cv::Size(15, 15), 8,
         cv::TermCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 30, 0.01),
         cv::OPTFLOW_USE_INITIAL_FLOW);
 
@@ -528,22 +535,22 @@ int Frontend::FindFeaturesInRight() {
     }
 
     #if DEBUG
-    //show stereo match result
-    // cv::Mat stereo_match_show = current_frame_->right_img_.clone();
-    // cv::cvtColor(stereo_match_show, stereo_match_show, cv::COLOR_GRAY2BGR);
-    // for(size_t i = 0; i < current_frame_->features_right_.size(); ++i) {
-    //     if (current_frame_->features_right_[i] != nullptr)
-    //     {
-    //         cv::circle(stereo_match_show,
-    //             current_frame_->features_right_[i]->position_.pt,
-    //             3, cv::Scalar(0,0,255), -1);
-    //         cv::line(stereo_match_show, 
-    //         current_frame_->features_right_[i]->position_.pt,
-    //         current_frame_->features_left_[i]->position_.pt,
-    //         cv::Scalar(0,255,0),2, -1);
-    //     }
-    // }
-    // cv::imshow("stereo_match_show", stereo_match_show);
+    // show stereo match result
+    cv::Mat stereo_match_show = current_frame_->right_img_.clone();
+    cv::cvtColor(stereo_match_show, stereo_match_show, cv::COLOR_GRAY2BGR);
+    for(size_t i = 0; i < current_frame_->features_right_.size(); ++i) {
+        if (current_frame_->features_right_[i] != nullptr)
+        {
+            cv::circle(stereo_match_show,
+                current_frame_->features_right_[i]->position_.pt,
+                3, cv::Scalar(0,0,255), -1);
+            cv::line(stereo_match_show, 
+            current_frame_->features_right_[i]->position_.pt,
+            current_frame_->features_left_[i]->position_.pt,
+            cv::Scalar(0,255,0),2, -1);
+        }
+    }
+    cv::imshow("stereo_match_show", stereo_match_show);
     #endif
     LOG(INFO) << "Find " << num_good_pts << " in the right image.";
     return num_good_pts;

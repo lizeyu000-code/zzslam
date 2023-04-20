@@ -45,7 +45,7 @@ int main(int argc, char **argv)
 
     std::vector<cv::Point2f> left_fpts;
     std::vector<cv::Point2f> right_fpts;
-    Eigen::Vector2d th(25, 10);
+    Eigen::Vector2d th(20, 10);
     cv::Mat mask;
     mask.create(left_img.rows, left_img.cols, CV_8UC1);
     mask.setTo(0);
