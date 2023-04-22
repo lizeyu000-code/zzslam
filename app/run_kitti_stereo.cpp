@@ -72,7 +72,7 @@ int main(int argc, char **argv)
 
         SE3 tcw_now = vo->TrackStereo(data_input);
 
-        int k = cv::waitKey(50);
+        int k = cv::waitKey(40);
         if (k==27)
             break;
         

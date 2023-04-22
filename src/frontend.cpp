@@ -62,10 +62,10 @@ bool Frontend::Track() {
     tracking_inliers_ = 0;
 
     int num_track_last = TrackLastFrame();
-    if (num_match_mpts > 15) {
-        tracking_inliers_ = EstimateCurrentPose();
+    if (num_match_mpts > 12) {
+        // tracking_inliers_ = EstimateCurrentPose();
+        tracking_inliers_ = EstimateCurrentPose_Eigen();
     }
-    
     //
     LOG(INFO) << "tracking_inliers_ is : " << tracking_inliers_;
     //
@@ -76,6 +76,7 @@ bool Frontend::Track() {
         // tracking bad
         status_ = FrontendStatus::TRACKING_BAD;
     } else {
+        LOG(WARNING) << "tracked map point num < 12 , track is very bad!";
         status_ = FrontendStatus::TRACKING_BAD;
         // lost
         // status_ = FrontendStatus::LOST;
@@ -122,7 +123,11 @@ void Frontend::SetObservationsForKeyFrame() {
     }
 }
 
-int Frontend::TriangulateNewPoints() {
+int Frontend::TriangulateNewPoints() 
+{
+    if (current_frame_->features_left_.size()==0) {
+        return 0;
+    }
     // std::vector<SE3> poses{camera_left_->pose(), camera_right_->pose()};
     SE3 current_pose_Twc = current_frame_->Pose().inverse();
     int cnt_triangulated_pts = 0;
@@ -168,6 +173,153 @@ int Frontend::TriangulateNewPoints() {
     return cnt_triangulated_pts;
 }
 
+int Frontend::EstimateCurrentPose_Eigen()
+{
+    const int iterations = 10;
+    const double eps = 1e-6;
+    double cost = 0, lastCost = 0;
+    double lambda = 0.01;
+    //prepare data
+    SE3 pose = current_frame_->Pose();
+    Mat33 cam_K = camera_left_->K();
+    double fx = cam_K(0, 0);
+    double fy = cam_K(1, 1);
+    double cx = cam_K(0, 2);
+    double cy = cam_K(1, 2);
+    //
+    // VecEigenVec3d points_3d;
+    // VecEigenVec2d points_2d;
+    std::vector<Eigen::Vector3d> VecPoints_3d;
+    std::vector<Eigen::Vector2d> VecPoints_2d;
+    int mp_matched_cnt = 0;
+    int inner_cnt = 0;
+    for (auto& fea: current_frame_->features_left_) {
+        auto mp = fea->map_point_.lock();
+        if (mp) { // if this point has been triangulated
+            Eigen::Vector3d pt3d = mp->pos_;
+            Eigen::Vector2d pt2d = Eigen::Vector2d(fea->position_.pt.x, fea->position_.pt.y);
+            VecPoints_3d.emplace_back(pt3d);
+            VecPoints_2d.emplace_back(pt2d);
+            mp_matched_cnt++;
+        }
+    }
+    // check
+    // if(mp_matched_cnt < 12) {
+    //     LOG(WARNING) << "mp_matched_cnt is not enough!" ;
+    //     return 1;
+    // }
+    //iteration optimation begin
+    for (int iter = 0; iter < iterations; iter++) {
+        Eigen::Matrix<double, 6, 6> H = Eigen::Matrix<double, 6, 6>::Zero();
+        Vec6 g = Vec6::Zero();
+        cost = 0;
+        // compute cost,计算所有点的重投影误差
+        for (int i = 0; i < VecPoints_3d.size(); i++) {
+            //先把3D点变换到当前相机坐标系下
+            Eigen::Vector3d pc = pose * VecPoints_3d[i]; // Pc = Tcw × Pw
+            double inv_z = 1.0 / pc[2];
+            double inv_z2 = inv_z * inv_z; //1/z^2
+            //然后把当前坐标系下的3D点投影到2D像素平面
+            Eigen::Vector2d proj(fx * pc[0] / pc[2] + cx, fy * pc[1] / pc[2] + cy);
+            //重投影误差
+            Eigen::Vector2d e = VecPoints_2d[i] - proj;
+            //对重投影误差做Huber鲁棒核函数的操作
+            // const double delta_ = 10;
+            // double x = e.x();
+            // double y = e.y();
+            // if (std::abs(x) < delta_) {
+            //     x = 0.5 * x * x;
+            // }else{
+            //     x =  delta_ * (std::abs(x) - 0.5 * delta_);
+            // }
+            //累加每个点的重投影误差
+            cost += e.squaredNorm();
+            //计算这个点的 重投影误差 对 位姿T 的雅科比矩阵，比如 J11 是在位姿1看到了路标点P1,
+            //J11=e11/x=(e11/T1,0,e11/P1,0,0,0,0),这个是二元优化的雅科比,大小和参与优化的位姿和看到的路标点数据有关
+            //但在这里我们只需要优化一个位姿，那就是当前位姿，
+            //e11=e1/T1,这个矩阵大小固定 2x6 ，这个是一元优化的雅科比
+            Eigen::Matrix<double, 2, 6> J;
+            J << -fx * inv_z,
+                0,
+                fx * pc[0] * inv_z2,
+                fx * pc[0] * pc[1] * inv_z2,
+                -fx - fx * pc[0] * pc[0] * inv_z2,
+                fx * pc[1] * inv_z,
+                0,
+                -fy * inv_z,
+                fy * pc[1] * inv_z2,
+                fy + fy * pc[1] * pc[1] * inv_z2,
+                -fy * pc[0] * pc[1] * inv_z2,
+                -fy * pc[0] * inv_z;
+            // H * delta_x = g
+            // J(x) * J(x).transpose * delta_x = -J(x).transpose * error
+            H += J.transpose() * J + lambda * Eigen::MatrixXd::Identity(6, 6);
+            g += -J.transpose() * e;
+        }
+        // dx是这次迭代计算的增量，也是我们根据李代数扰动模型计算的雅科比，得到的李代数增量
+        Vec6 dx;
+        dx = H.ldlt().solve(g);
+        // check
+        if (isnan(dx[0])) {
+            // std::cout << "result is nan!" << std::endl;
+            LOG(ERROR)<< "result is nan!" ;
+            break;
+        }
+        // check
+        if (iter > 0 && cost >= lastCost) {
+            // cost increase, update is not good
+            LOG(ERROR)<< "cost increase, update is not good!" ;
+            // std::cout << "cost: " << cost << ", last cost: " << lastCost << std::endl;
+            break;
+        }
+        // update your estimation
+        pose = Sophus::SE3d::exp(dx) * pose;
+        lastCost = cost;
+        // cout
+        std::cout << "iteration " << iter << " cost=" << std::setprecision(12) << cost << std::endl;
+        printf("dx.norm() is %f.\n", dx.norm());
+        if (dx.norm() < eps) {
+            // 当增量几乎不再变化的时候，converge
+            break;
+        }
+        // 调整LM算法的参数lambda
+        // if (cost < 1) {
+        //     lambda /= 10;
+        // }
+        // else {
+        //     lambda *= 10;
+        // }
+        printf("g.norm() is %f.\n", g.norm());
+        printf("lambda is %f.\n", lambda);
+    }
+
+    // outliner rejection
+    const double chi2_th = 5.991; //卡方检验
+    for (auto& fea: current_frame_->features_left_) {
+        auto mp = fea->map_point_.lock();
+        if(mp) {
+            Eigen::Vector2d pt2d_obs = Eigen::Vector2d(fea->position_.pt.x, fea->position_.pt.y);
+            Eigen::Vector2d pt2d_reproject = camera_left_->world2pixel(mp->pos_, pose);
+            Eigen::Vector2d delta = ( pt2d_reproject - pt2d_obs );
+            // A*A = |A|*|A|*cos(0) = |A|^2 = (x^2 + y^2)
+            double error2 = delta.dot ( delta );
+            if ( error2 > chi2_th ) {
+                fea->is_outlier_ = true;
+                fea->map_point_.reset();
+            }
+            else{
+                fea->is_outlier_ = false;
+                inner_cnt++;
+            }
+        }
+    }
+    LOG(INFO) << "mp_matched_cnt is : " << mp_matched_cnt << ". inner_cnt is : " << inner_cnt;
+    //update current pose
+    current_frame_->SetPose(pose);
+    //TODO:其实可以对内点进行一次优化，改善一下点的位置，或者考虑做一个深度滤波器？
+    return inner_cnt;
+}
+
 int Frontend::EstimateCurrentPose() {
     // setup g2o
     typedef g2o::BlockSolver_6_3 BlockSolverType;
@@ -178,16 +330,13 @@ int Frontend::EstimateCurrentPose() {
             g2o::make_unique<LinearSolverType>()));
     g2o::SparseOptimizer optimizer;
     optimizer.setAlgorithm(solver);
-
     // vertex
     VertexPose *vertex_pose = new VertexPose();  // camera vertex_pose
     vertex_pose->setId(0);
     vertex_pose->setEstimate(current_frame_->Pose());
     optimizer.addVertex(vertex_pose);
-
     // K
     Mat33 K = camera_left_->K();
-
     // edges
     int index = 1;
     std::vector<EdgeProjectionPoseOnly *> edges;
@@ -209,7 +358,6 @@ int Frontend::EstimateCurrentPose() {
             index++;
         }
     }
-
     // estimate the Pose the determine the outliers
     const double chi2_th = 5.991;
     int cnt_outlier = 0;
@@ -237,14 +385,11 @@ int Frontend::EstimateCurrentPose() {
             }
         }
     }
-
     LOG(INFO) << "Outlier/Inlier in pose estimating: " << cnt_outlier << "/"
               << features.size() - cnt_outlier;
     // Set pose and outlier
     current_frame_->SetPose(vertex_pose->estimate());
-
     LOG(INFO) << "Current Pose = \n" << current_frame_->Pose().matrix();
-
     for (auto &feat : features) {
         if (feat->is_outlier_) {
             feat->map_point_.reset();
@@ -255,12 +400,15 @@ int Frontend::EstimateCurrentPose() {
 }
 
 // use LK flow to estimate points in the last image
-int Frontend::TrackLastFrame() {
+int Frontend::TrackLastFrame() 
+{
+    LOG(INFO) << "Now tracking frame id : " << current_frame_->id_ <<" ." 
+        << " And now stamp is : " << current_frame_->time_stamp_;
+
     // Step 0 准备匹配点
-    LOG(INFO) << "Now tracking " << current_frame_->id_ <<" frame." 
-        << " And now stamp is" << current_frame_->time_stamp_;
     std::vector<cv::Point2f> kps_last, kps_current;
-    for (auto &kp : last_frame_->features_left_) {
+    if (last_frame_->features_left_.size()>0) {
+        for (auto &kp : last_frame_->features_left_) {
         // if (kp->map_point_.lock()) {
         //     // use project point
         //     auto mp = kp->map_point_.lock();
@@ -272,6 +420,12 @@ int Frontend::TrackLastFrame() {
             kps_last.push_back(kp->position_.pt);
             kps_current.push_back(kp->position_.pt);
         // }
+        }
+    }
+    else{
+        LOG(WARNING) << "Last frame have 0 feature, just try to detect new features.";
+        DetectFeatures();
+        return 0;
     }
 
     // Step 1 计算光流
@@ -280,7 +434,7 @@ int Frontend::TrackLastFrame() {
     Mat error;
     cv::calcOpticalFlowPyrLK(
         last_frame_->left_img_, current_frame_->left_img_, kps_last, kps_current, 
-        status, error, cv::Size(15, 15), 8,
+        status, error, cv::Size(15, 15), 5,
         cv::TermCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 30, 0.01),
         cv::OPTFLOW_USE_INITIAL_FLOW);
     // LOG(INFO) << "tracker calcOpticalFlowPyrLK cost : " << t_1.toc() << " ms.";
@@ -394,11 +548,17 @@ int Frontend::DetectFeatures() {
     for (auto &feat : current_frame_->features_left_) {
         cv::circle(mask, feat->position_.pt, MIN_DIS, 0, cv::FILLED);
     }
-
+    // cv::imshow("mask",mask);
     std::vector<cv::Point2f> keypoints;
-    Eigen::Vector2d th(20, 10);
-    GridFastDetector(current_frame_->left_img_, keypoints, mask, th, 40);
-    // cv::goodFeaturesToTrack(current_frame_->left_img_, keypoints, 200 - current_frame_->features_left_.size(), 0.01, MIN_DIS, mask);
+    // Eigen::Vector2d th(25, 10);
+    // GridFastDetector(current_frame_->left_img_, keypoints, mask, th, 40);
+    int feat_num = 200 - current_frame_->features_left_.size();
+    if (feat_num<0) {
+        LOG(ERROR) << "current_frame_->features_left_.size() is : " << current_frame_->features_left_.size();
+        LOG(ERROR) << "feat_num<0!";
+        feat_num=0;
+    }
+    cv::goodFeaturesToTrack(current_frame_->left_img_, keypoints, feat_num, 0.01, MIN_DIS, mask);
     //
     int cnt_detected = 0;
     for (auto &kp : keypoints) {
@@ -485,36 +645,44 @@ void Frontend::GridFastDetector(
 }
 
 // use LK flow to estimate points in the right image
-int Frontend::FindFeaturesInRight() {
+int Frontend::FindFeaturesInRight() 
+{
     std::vector<cv::Point2f> kps_left, kps_right;
-    for (auto &kp : current_frame_->features_left_) {
-        kps_left.push_back(kp->position_.pt);
-        kps_right.push_back(kp->position_.pt);
-        // auto mp = kp->map_point_.lock();
-        // if (mp) {
-        //     // use projected points as initial guess
-        //     auto px = camera_right_->world2pixel(mp->pos_, current_frame_->Pose());
-        //     kps_right.push_back(cv::Point2f(px[0], px[1]));
-        // } else {
-        //     // use same pixel in left iamge
-        //     kps_right.push_back(kp->position_.pt);
-        // }
+    if (current_frame_->features_left_.size()>0)
+    {
+        for (auto &kp : current_frame_->features_left_) {
+            kps_left.push_back(kp->position_.pt);
+            kps_right.push_back(kp->position_.pt);
+            // auto mp = kp->map_point_.lock();
+            // if (mp) {
+            //     // use projected points as initial guess
+            //     auto px = camera_right_->world2pixel(mp->pos_, current_frame_->Pose());
+            //     kps_right.push_back(cv::Point2f(px[0], px[1]));
+            // } else {
+            //     // use same pixel in left iamge
+            //     kps_right.push_back(kp->position_.pt);
+            // }
+        }
+    }
+    else{
+        return 0;
     }
 
     std::vector<uchar> status;
     Mat error;
     cv::calcOpticalFlowPyrLK(
         current_frame_->left_img_, current_frame_->right_img_, kps_left,
-        kps_right, status, error, cv::Size(15, 15), 8,
+        kps_right, status, error, cv::Size(15, 15), 5,
         cv::TermCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 30, 0.01),
         cv::OPTFLOW_USE_INITIAL_FLOW);
 
     // 是否可以用更简单的方式，直接默认极线是水平的
     for (size_t i = 0; i < status.size(); i++) {
         if (status[i]) {
-            float left_high = kps_left[i].y;
-            float right_high = kps_right[i].y;
-            if (abs(left_high - right_high)>2) {
+            if (abs(kps_left[i].y - kps_right[i].y)>2) {
+                status[i] = 0;
+            }
+            if( kps_left[i].x < kps_right[i].x ) {
                 status[i] = 0;
             }
         }

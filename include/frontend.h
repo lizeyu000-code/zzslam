@@ -73,7 +73,7 @@ class Frontend {
      * @return num of inliers
      */
     int EstimateCurrentPose();
-
+    int EstimateCurrentPose_Eigen();
     /**
      * set current frame as a keyframe and insert it into backend
      * @return true if success
