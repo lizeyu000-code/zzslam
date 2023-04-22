@@ -72,10 +72,11 @@ SE3 VisualOdometry::TrackStereo(Multi_Sensor_Data data_input_)
     // 创建帧
     auto new_frame = Frame::CreateFrame();
     new_frame->time_stamp_ = data_input_.time_stamp_;
-    new_frame->left_img_ = left_image_undistored;
-    new_frame->right_img_ = right_image_undistored;
-    // new_frame->Imu_Data_ = data_input_.Imu_Data;
-    // new_frame->Wheel_Odom_ = data_input_.Wheel_Odom_data;
+    new_frame->left_img_   = left_image_undistored;
+    new_frame->right_img_  = right_image_undistored;
+    new_frame->mvImuDatas  = data_input_.ImuDatas;
+    new_frame->GPS_msg     = data_input_.GPS_Pose;
+    new_frame->mWheelOdom  = data_input_.Wheel_Odom_data;
 
     // track
     SE3 tcw_ = frontend_->AddFrame(new_frame);

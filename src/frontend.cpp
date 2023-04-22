@@ -63,11 +63,12 @@ bool Frontend::Track() {
 
     int num_track_last = TrackLastFrame();
     if (num_match_mpts > 12) {
-        // tracking_inliers_ = EstimateCurrentPose();
-        tracking_inliers_ = EstimateCurrentPose_Eigen();
+        tracking_inliers_ = EstimateCurrentPose();
+        // tracking_inliers_ = EstimateCurrentPose_Eigen();
     }
     //
     LOG(INFO) << "tracking_inliers_ is : " << tracking_inliers_;
+    // LOG(INFO) << "Current Pose = \n" << current_frame_->Pose().matrix();
     //
     if (tracking_inliers_ > num_features_tracking_) {
         // tracking good
@@ -108,11 +109,12 @@ bool Frontend::InsertKeyframe() {
     FindFeaturesInRight();
     // triangulate map points
     TriangulateNewPoints();
+    // todo:fuse mappoint , culling bad mappoint,and update mapponint
+
     // update backend because we have a new keyframe
     // backend_->UpdateMap();
 
     if (viewer_) viewer_->UpdateMap();
-
     return true;
 }
 
@@ -129,19 +131,12 @@ int Frontend::TriangulateNewPoints()
         return 0;
     }
     // std::vector<SE3> poses{camera_left_->pose(), camera_right_->pose()};
+    //
     SE3 current_pose_Twc = current_frame_->Pose().inverse();
     int cnt_triangulated_pts = 0;
     for (size_t i = 0; i < current_frame_->features_left_.size(); ++i) {
         if (current_frame_->features_left_[i]->map_point_.expired() &&
             current_frame_->features_right_[i] != nullptr) {
-            // 左图的特征点未关联地图点且存在右图匹配点，尝试三角化
-            // std::vector<Vec3> points{
-            //     camera_left_->pixel2camera(
-            //         Vec2(current_frame_->features_left_[i]->position_.pt.x,
-            //              current_frame_->features_left_[i]->position_.pt.y)),
-            //     camera_right_->pixel2camera(
-            //         Vec2(current_frame_->features_right_[i]->position_.pt.x,
-            //              current_frame_->features_right_[i]->position_.pt.y))};
             float disparity = current_frame_->features_left_[i]->position_.pt.x -
                     current_frame_->features_right_[i]->position_.pt.x;
             if (disparity < 2) {
@@ -153,7 +148,6 @@ int Frontend::TriangulateNewPoints()
                     Vec2(current_frame_->features_left_[i]->position_.pt.x,
                         current_frame_->features_left_[i]->position_.pt.y),
                         depth);
-
             // if (triangulation(poses, points, pworld) && pworld[2] > 0) {
             if(pworld[2] > 0) {
                 auto new_map_point = MapPoint::CreateNewMappoint();
@@ -169,6 +163,8 @@ int Frontend::TriangulateNewPoints()
             }
         }
     }
+    //todo: try to triangulate far away point by find more match in active frame
+    // std::unordered_map<unsigned long, Frame::Ptr> akf = map_->GetActiveKeyFrames();
     LOG(INFO) << "new landmarks: " << cnt_triangulated_pts;
     return cnt_triangulated_pts;
 }
@@ -187,8 +183,6 @@ int Frontend::EstimateCurrentPose_Eigen()
     double cx = cam_K(0, 2);
     double cy = cam_K(1, 2);
     //
-    // VecEigenVec3d points_3d;
-    // VecEigenVec2d points_2d;
     std::vector<Eigen::Vector3d> VecPoints_3d;
     std::vector<Eigen::Vector2d> VecPoints_2d;
     int mp_matched_cnt = 0;
@@ -223,15 +217,7 @@ int Frontend::EstimateCurrentPose_Eigen()
             Eigen::Vector2d proj(fx * pc[0] / pc[2] + cx, fy * pc[1] / pc[2] + cy);
             //重投影误差
             Eigen::Vector2d e = VecPoints_2d[i] - proj;
-            //对重投影误差做Huber鲁棒核函数的操作
-            // const double delta_ = 10;
-            // double x = e.x();
-            // double y = e.y();
-            // if (std::abs(x) < delta_) {
-            //     x = 0.5 * x * x;
-            // }else{
-            //     x =  delta_ * (std::abs(x) - 0.5 * delta_);
-            // }
+            //todo:对重投影误差做Huber鲁棒核函数的操作
             //累加每个点的重投影误差
             cost += e.squaredNorm();
             //计算这个点的 重投影误差 对 位姿T 的雅科比矩阵，比如 J11 是在位姿1看到了路标点P1,
@@ -252,7 +238,7 @@ int Frontend::EstimateCurrentPose_Eigen()
                 -fy * pc[0] * pc[1] * inv_z2,
                 -fy * pc[0] * inv_z;
             // H * delta_x = g
-            // J(x) * J(x).transpose * delta_x = -J(x).transpose * error
+            // J(x).transpose * J(x) * delta_x = -J(x).transpose * error
             H += J.transpose() * J + lambda * Eigen::MatrixXd::Identity(6, 6);
             g += -J.transpose() * e;
         }
@@ -276,8 +262,8 @@ int Frontend::EstimateCurrentPose_Eigen()
         pose = Sophus::SE3d::exp(dx) * pose;
         lastCost = cost;
         // cout
-        std::cout << "iteration " << iter << " cost=" << std::setprecision(12) << cost << std::endl;
-        printf("dx.norm() is %f.\n", dx.norm());
+        // std::cout << "iteration " << iter << " cost=" << std::setprecision(12) << cost << std::endl;
+        // printf("dx.norm() is %f.\n", dx.norm());
         if (dx.norm() < eps) {
             // 当增量几乎不再变化的时候，converge
             break;
@@ -289,8 +275,8 @@ int Frontend::EstimateCurrentPose_Eigen()
         // else {
         //     lambda *= 10;
         // }
-        printf("g.norm() is %f.\n", g.norm());
-        printf("lambda is %f.\n", lambda);
+        // printf("g.norm() is %f.\n", g.norm());
+        // printf("lambda is %f.\n", lambda);
     }
 
     // outliner rejection
@@ -389,7 +375,6 @@ int Frontend::EstimateCurrentPose() {
               << features.size() - cnt_outlier;
     // Set pose and outlier
     current_frame_->SetPose(vertex_pose->estimate());
-    LOG(INFO) << "Current Pose = \n" << current_frame_->Pose().matrix();
     for (auto &feat : features) {
         if (feat->is_outlier_) {
             feat->map_point_.reset();
@@ -427,7 +412,6 @@ int Frontend::TrackLastFrame()
         DetectFeatures();
         return 0;
     }
-
     // Step 1 计算光流
     // TicToc t_1;
     std::vector<uchar> status;
@@ -447,7 +431,6 @@ int Frontend::TrackLastFrame()
             status[i] = 0;
         }
     }
-
     // step 3 
     int num_good_pts = 0;
     // int num_match_mpts = 0;
@@ -467,7 +450,6 @@ int Frontend::TrackLastFrame()
             // num_good_pts++;
         }
     }
-
     // step 4 mask剔除点,优先保留观测次数多的点
     cv::Mat mask_for_redu_feat(current_frame_->left_img_.size(), CV_8UC1, cv::Scalar(255));
     // 根据追踪次数给特征点重新排个序 , 利用光流特点，追踪多的稳定性好，排前面
@@ -493,7 +475,6 @@ int Frontend::TrackLastFrame()
             }
         }
     }
-
     #if DEBUG
     // draw optical tracker result
     std::vector<cv::Point2f> Last_kps_pt, Current_kps_pt;
@@ -513,12 +494,10 @@ int Frontend::TrackLastFrame()
             << " And matchd " << num_match_mpts << " Map Point.";
     cv::imshow("kp_im_show",kp_im_show);
     #endif
-    
     // step 5 detect new feature point
     if(num_good_pts < 150) {
         DetectFeatures();
     }
-
     return num_good_pts;
 }
 
@@ -550,15 +529,15 @@ int Frontend::DetectFeatures() {
     }
     // cv::imshow("mask",mask);
     std::vector<cv::Point2f> keypoints;
-    // Eigen::Vector2d th(25, 10);
-    // GridFastDetector(current_frame_->left_img_, keypoints, mask, th, 40);
-    int feat_num = 200 - current_frame_->features_left_.size();
-    if (feat_num<0) {
-        LOG(ERROR) << "current_frame_->features_left_.size() is : " << current_frame_->features_left_.size();
-        LOG(ERROR) << "feat_num<0!";
-        feat_num=0;
-    }
-    cv::goodFeaturesToTrack(current_frame_->left_img_, keypoints, feat_num, 0.01, MIN_DIS, mask);
+    Eigen::Vector2d th(25, 10);
+    GridFastDetector(current_frame_->left_img_, keypoints, mask, th, 40);
+    // int feat_num = 200 - current_frame_->features_left_.size();
+    // if (feat_num<0) {
+    //     LOG(ERROR) << "current_frame_->features_left_.size() is : " << current_frame_->features_left_.size();
+    //     LOG(ERROR) << "feat_num<0!";
+    //     feat_num=0;
+    // }
+    // cv::goodFeaturesToTrack(current_frame_->left_img_, keypoints, feat_num, 0.01, MIN_DIS, mask);
     //
     int cnt_detected = 0;
     for (auto &kp : keypoints) {
