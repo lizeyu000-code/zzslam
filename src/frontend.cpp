@@ -11,6 +11,7 @@
 #include "g2o_types.h"
 #include "map.h"
 #include "viewer.h"
+#include "elas.h"
 
 #define DEBUG 1
 namespace myslam {
@@ -82,7 +83,10 @@ bool Frontend::Track() {
         // lost
         // status_ = FrontendStatus::LOST;
     }
-
+    // generateStereoPointCloud
+    // cv::Mat dmap_tmp = generateDisparityMap(current_frame_->left_img_, current_frame_->right_img_);
+    // generateStereoPointCloud(current_frame_->left_img_, dmap_tmp);
+    //
     InsertKeyframe();
     relative_motion_ = current_frame_->Pose() * last_frame_->Pose().inverse();
 
@@ -701,6 +705,56 @@ int Frontend::FindFeaturesInRight()
     #endif
     LOG(INFO) << "Find " << num_good_pts << " in the right image.";
     return num_good_pts;
+}
+
+cv::Mat Frontend::generateDisparityMap(const cv::Mat& left, const cv::Mat& right)
+{
+    const cv::Size imsize = left.size();
+    // out_img_size = imsize;
+    const int32_t dims[3] = {imsize.width, imsize.height, imsize.width}; // bytes per line = width
+    cv::Mat leftdpf = Mat::zeros(imsize, CV_32F);
+    cv::Mat rightdpf = Mat::zeros(imsize, CV_32F);
+
+    // process
+    Elas::parameters param(Elas::ROBOTICS);
+    param.postprocess_only_left = true;
+    // param.disp_min = 5;
+    // param.disp_max = 64;
+    Elas elas(param);
+
+    TicToc t_1;
+    elas.process(left.data, right.data, leftdpf.ptr<float>(0), rightdpf.ptr<float>(0), dims);
+    printf("elas cost %f ms.\n", t_1.toc());
+    cv::Mat dmap = cv::Mat(imsize, CV_8U, cv::Scalar(0));
+    leftdpf.convertTo(dmap, CV_8U, 1.);
+    cv::imshow("dmap", dmap);
+    // cv::waitKey(0);
+    return leftdpf;
+}
+
+bool Frontend::generateStereoPointCloud(const cv::Mat& left, const cv::Mat& dis)
+{
+    std::vector<Eigen::Vector4d> pointcloud;
+    // 内参
+    Mat33 K = camera_left_->K();
+    for (int v = 0; v < left.rows; v++) {
+        for (int u = 0; u < left.cols; u++) {
+            if (dis.at<float>(v, u) <= 8.0 || dis.at<float>(v, u) >= 96.0) continue;
+            // 前三维为xyz,第四维为颜色
+            Eigen::Vector4d point(0, 0, 0, left.at<uchar>(v, u) / 255.0); 
+            // 根据双目模型计算 point 的位置
+            double x = (u - K(0,2)) / K(0,0);
+            double y = (v - K(1,2)) / K(1,1);
+            double depth = K(0,0) * camera_left_->baseline_ / (dis.at<float>(v, u));
+            point[0] = x * depth;
+            point[1] = y * depth;
+            point[2] = depth;
+            //
+            pointcloud.push_back(point);
+        }
+    }
+    current_frame_->stereo_pcl = pointcloud;
+    return true;
 }
 
 bool Frontend::BuildInitMap() {

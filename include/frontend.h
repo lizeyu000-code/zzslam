@@ -105,6 +105,8 @@ class Frontend {
      * @return num of features found
      */
     int FindFeaturesInRight();
+    cv::Mat generateDisparityMap(const cv::Mat& left, const cv::Mat& right);
+    bool generateStereoPointCloud(const cv::Mat& left, const cv::Mat& dis);
 
     int FindMatch(const Frame::Ptr &image_last, const Frame::Ptr &image_cur,
         std::vector<cv::Point2f> &imgLast_feat_pt, std::vector<cv::Point2f> &imgCur_feat_pt, 

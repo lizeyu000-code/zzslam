@@ -31,6 +31,8 @@ struct Frame {
     Eigen::Vector4d GPS_msg;         // x, y, z, confidence
     std::vector<double> mvImuDatas;  // imu raw data , it could be rpy + acc + gyro
     SE3 mWheelOdom;                  // To0oi
+    //
+    std::vector<Eigen::Vector4d> stereo_pcl;
 
     // extracted features in left image
     std::vector<std::shared_ptr<Feature>> features_left_;

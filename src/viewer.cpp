@@ -79,7 +79,30 @@ void Viewer::ThreadLoop() {
         if (map_) {
             DrawMapPoints();
         }
-
+        if (current_frame_)
+        {
+            //
+            // for (auto &p: current_frame_->stereo_pcl)
+            // {
+            //     globe_mappoit.push_back(p);
+            // }
+            // printf("globe_mappoit size is : %d.\n", globe_mappoit.size());
+            //
+            SE3 Twc = current_frame_->Pose().inverse();
+            glPushMatrix();
+            Sophus::Matrix4f m = Twc.matrix().template cast<float>();
+            glMultMatrixf((GLfloat*)m.data());
+            //
+            glPointSize(2);
+            glBegin(GL_POINTS);
+            for (auto &p: current_frame_->stereo_pcl)
+            {
+                glColor3f(p[3], p[3], p[3]);
+                glVertex3d(p[0], p[1], p[2]);
+            }
+            glEnd();
+            glPopMatrix();
+        }
         pangolin::FinishFrame();
         usleep(5000);
     }
