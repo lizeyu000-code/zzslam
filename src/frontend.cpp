@@ -5,13 +5,13 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/highgui.hpp>
 #include "algorithm.h"
-#include "backend.h"
+// #include "backend.h"
 #include "feature.h"
 #include "frontend.h"
-#include "g2o_types.h"
+// #include "g2o_types.h"
 #include "map.h"
 #include "viewer.h"
-#include "elas.h"
+// #include "elas.h"
 
 #define DEBUG 1
 namespace myslam {
@@ -64,8 +64,8 @@ bool Frontend::Track() {
 
     int num_track_last = TrackLastFrame();
     if (num_match_mpts > 12) {
-        tracking_inliers_ = EstimateCurrentPose();
-        // tracking_inliers_ = EstimateCurrentPose_Eigen();
+        // tracking_inliers_ = EstimateCurrentPose();
+        tracking_inliers_ = EstimateCurrentPose_Eigen();
     }
     //
     LOG(INFO) << "tracking_inliers_ is : " << tracking_inliers_;
@@ -310,83 +310,83 @@ int Frontend::EstimateCurrentPose_Eigen()
     return inner_cnt;
 }
 
-int Frontend::EstimateCurrentPose() {
-    // setup g2o
-    typedef g2o::BlockSolver_6_3 BlockSolverType;
-    typedef g2o::LinearSolverDense<BlockSolverType::PoseMatrixType>
-        LinearSolverType;
-    auto solver = new g2o::OptimizationAlgorithmLevenberg(
-        g2o::make_unique<BlockSolverType>(
-            g2o::make_unique<LinearSolverType>()));
-    g2o::SparseOptimizer optimizer;
-    optimizer.setAlgorithm(solver);
-    // vertex
-    VertexPose *vertex_pose = new VertexPose();  // camera vertex_pose
-    vertex_pose->setId(0);
-    vertex_pose->setEstimate(current_frame_->Pose());
-    optimizer.addVertex(vertex_pose);
-    // K
-    Mat33 K = camera_left_->K();
-    // edges
-    int index = 1;
-    std::vector<EdgeProjectionPoseOnly *> edges;
-    std::vector<Feature::Ptr> features;
-    for (size_t i = 0; i < current_frame_->features_left_.size(); ++i) {
-        auto mp = current_frame_->features_left_[i]->map_point_.lock();
-        if (mp) {
-            features.push_back(current_frame_->features_left_[i]);
-            EdgeProjectionPoseOnly *edge =
-                new EdgeProjectionPoseOnly(mp->pos_, K);
-            edge->setId(index);
-            edge->setVertex(0, vertex_pose);
-            edge->setMeasurement(
-                toVec2(current_frame_->features_left_[i]->position_.pt));
-            edge->setInformation(Eigen::Matrix2d::Identity());
-            edge->setRobustKernel(new g2o::RobustKernelHuber);
-            edges.push_back(edge);
-            optimizer.addEdge(edge);
-            index++;
-        }
-    }
-    // estimate the Pose the determine the outliers
-    const double chi2_th = 5.991;
-    int cnt_outlier = 0;
-    for (int iteration = 0; iteration < 4; ++iteration) {
-        vertex_pose->setEstimate(current_frame_->Pose());
-        optimizer.initializeOptimization();
-        optimizer.optimize(10);
-        cnt_outlier = 0;
-        // count the outliers
-        for (size_t i = 0; i < edges.size(); ++i) {
-            auto e = edges[i];
-            if (features[i]->is_outlier_) {
-                e->computeError();
-            }
-            if (e->chi2() > chi2_th) {
-                features[i]->is_outlier_ = true;
-                e->setLevel(1);
-                cnt_outlier++;
-            } else {
-                features[i]->is_outlier_ = false;
-                e->setLevel(0);
-            };
-            if (iteration == 2) {
-                e->setRobustKernel(nullptr); //为什么第二次迭代要去掉鲁棒核函数？
-            }
-        }
-    }
-    LOG(INFO) << "Outlier/Inlier in pose estimating: " << cnt_outlier << "/"
-              << features.size() - cnt_outlier;
-    // Set pose and outlier
-    current_frame_->SetPose(vertex_pose->estimate());
-    for (auto &feat : features) {
-        if (feat->is_outlier_) {
-            feat->map_point_.reset();
-            // feat->is_outlier_ = false;  // maybe we can still use it in future
-        }
-    }
-    return features.size() - cnt_outlier;
-}
+// int Frontend::EstimateCurrentPose() {
+//     // setup g2o
+//     typedef g2o::BlockSolver_6_3 BlockSolverType;
+//     typedef g2o::LinearSolverDense<BlockSolverType::PoseMatrixType>
+//         LinearSolverType;
+//     auto solver = new g2o::OptimizationAlgorithmLevenberg(
+//         g2o::make_unique<BlockSolverType>(
+//             g2o::make_unique<LinearSolverType>()));
+//     g2o::SparseOptimizer optimizer;
+//     optimizer.setAlgorithm(solver);
+//     // vertex
+//     VertexPose *vertex_pose = new VertexPose();  // camera vertex_pose
+//     vertex_pose->setId(0);
+//     vertex_pose->setEstimate(current_frame_->Pose());
+//     optimizer.addVertex(vertex_pose);
+//     // K
+//     Mat33 K = camera_left_->K();
+//     // edges
+//     int index = 1;
+//     std::vector<EdgeProjectionPoseOnly *> edges;
+//     std::vector<Feature::Ptr> features;
+//     for (size_t i = 0; i < current_frame_->features_left_.size(); ++i) {
+//         auto mp = current_frame_->features_left_[i]->map_point_.lock();
+//         if (mp) {
+//             features.push_back(current_frame_->features_left_[i]);
+//             EdgeProjectionPoseOnly *edge =
+//                 new EdgeProjectionPoseOnly(mp->pos_, K);
+//             edge->setId(index);
+//             edge->setVertex(0, vertex_pose);
+//             edge->setMeasurement(
+//                 toVec2(current_frame_->features_left_[i]->position_.pt));
+//             edge->setInformation(Eigen::Matrix2d::Identity());
+//             edge->setRobustKernel(new g2o::RobustKernelHuber);
+//             edges.push_back(edge);
+//             optimizer.addEdge(edge);
+//             index++;
+//         }
+//     }
+//     // estimate the Pose the determine the outliers
+//     const double chi2_th = 5.991;
+//     int cnt_outlier = 0;
+//     for (int iteration = 0; iteration < 4; ++iteration) {
+//         vertex_pose->setEstimate(current_frame_->Pose());
+//         optimizer.initializeOptimization();
+//         optimizer.optimize(10);
+//         cnt_outlier = 0;
+//         // count the outliers
+//         for (size_t i = 0; i < edges.size(); ++i) {
+//             auto e = edges[i];
+//             if (features[i]->is_outlier_) {
+//                 e->computeError();
+//             }
+//             if (e->chi2() > chi2_th) {
+//                 features[i]->is_outlier_ = true;
+//                 e->setLevel(1);
+//                 cnt_outlier++;
+//             } else {
+//                 features[i]->is_outlier_ = false;
+//                 e->setLevel(0);
+//             };
+//             if (iteration == 2) {
+//                 e->setRobustKernel(nullptr); //为什么第二次迭代要去掉鲁棒核函数？
+//             }
+//         }
+//     }
+//     LOG(INFO) << "Outlier/Inlier in pose estimating: " << cnt_outlier << "/"
+//               << features.size() - cnt_outlier;
+//     // Set pose and outlier
+//     current_frame_->SetPose(vertex_pose->estimate());
+//     for (auto &feat : features) {
+//         if (feat->is_outlier_) {
+//             feat->map_point_.reset();
+//             // feat->is_outlier_ = false;  // maybe we can still use it in future
+//         }
+//     }
+//     return features.size() - cnt_outlier;
+// }
 
 // use LK flow to estimate points in the last image
 int Frontend::TrackLastFrame() 
@@ -707,55 +707,53 @@ int Frontend::FindFeaturesInRight()
     return num_good_pts;
 }
 
-cv::Mat Frontend::generateDisparityMap(const cv::Mat& left, const cv::Mat& right)
-{
-    const cv::Size imsize = left.size();
-    // out_img_size = imsize;
-    const int32_t dims[3] = {imsize.width, imsize.height, imsize.width}; // bytes per line = width
-    cv::Mat leftdpf = Mat::zeros(imsize, CV_32F);
-    cv::Mat rightdpf = Mat::zeros(imsize, CV_32F);
+// cv::Mat Frontend::generateDisparityMap(const cv::Mat& left, const cv::Mat& right)
+// {
+//     const cv::Size imsize = left.size();
+//     // out_img_size = imsize;
+//     const int32_t dims[3] = {imsize.width, imsize.height, imsize.width}; // bytes per line = width
+//     cv::Mat leftdpf = Mat::zeros(imsize, CV_32F);
+//     cv::Mat rightdpf = Mat::zeros(imsize, CV_32F);
+//     // process
+//     Elas::parameters param(Elas::ROBOTICS);
+//     param.postprocess_only_left = true;
+//     // param.disp_min = 5;
+//     // param.disp_max = 64;
+//     Elas elas(param);
+//     TicToc t_1;
+//     elas.process(left.data, right.data, leftdpf.ptr<float>(0), rightdpf.ptr<float>(0), dims);
+//     printf("elas cost %f ms.\n", t_1.toc());
+//     cv::Mat dmap = cv::Mat(imsize, CV_8U, cv::Scalar(0));
+//     leftdpf.convertTo(dmap, CV_8U, 1.);
+//     cv::imshow("dmap", dmap);
+//     // cv::waitKey(0);
+//     return leftdpf;
+// }
 
-    // process
-    Elas::parameters param(Elas::ROBOTICS);
-    param.postprocess_only_left = true;
-    // param.disp_min = 5;
-    // param.disp_max = 64;
-    Elas elas(param);
-
-    TicToc t_1;
-    elas.process(left.data, right.data, leftdpf.ptr<float>(0), rightdpf.ptr<float>(0), dims);
-    printf("elas cost %f ms.\n", t_1.toc());
-    cv::Mat dmap = cv::Mat(imsize, CV_8U, cv::Scalar(0));
-    leftdpf.convertTo(dmap, CV_8U, 1.);
-    cv::imshow("dmap", dmap);
-    // cv::waitKey(0);
-    return leftdpf;
-}
-
-bool Frontend::generateStereoPointCloud(const cv::Mat& left, const cv::Mat& dis)
-{
-    std::vector<Eigen::Vector4d> pointcloud;
-    // 内参
-    Mat33 K = camera_left_->K();
-    for (int v = 0; v < left.rows; v++) {
-        for (int u = 0; u < left.cols; u++) {
-            if (dis.at<float>(v, u) <= 8.0 || dis.at<float>(v, u) >= 96.0) continue;
-            // 前三维为xyz,第四维为颜色
-            Eigen::Vector4d point(0, 0, 0, left.at<uchar>(v, u) / 255.0); 
-            // 根据双目模型计算 point 的位置
-            double x = (u - K(0,2)) / K(0,0);
-            double y = (v - K(1,2)) / K(1,1);
-            double depth = K(0,0) * camera_left_->baseline_ / (dis.at<float>(v, u));
-            point[0] = x * depth;
-            point[1] = y * depth;
-            point[2] = depth;
-            //
-            pointcloud.push_back(point);
-        }
-    }
-    current_frame_->stereo_pcl = pointcloud;
-    return true;
-}
+// bool Frontend::generateStereoPointCloud(const cv::Mat& left, const cv::Mat& dis)
+// {
+//     std::vector<Eigen::Vector4d> pointcloud;
+//     // 内参
+//     Mat33 K = camera_left_->K();
+//     for (int v = 0; v < left.rows; v++) {
+//         for (int u = 0; u < left.cols; u++) {
+//             if (dis.at<float>(v, u) <= 8.0 || dis.at<float>(v, u) >= 96.0) continue;
+//             // 前三维为xyz,第四维为颜色
+//             Eigen::Vector4d point(0, 0, 0, left.at<uchar>(v, u) / 255.0); 
+//             // 根据双目模型计算 point 的位置
+//             double x = (u - K(0,2)) / K(0,0);
+//             double y = (v - K(1,2)) / K(1,1);
+//             double depth = K(0,0) * camera_left_->baseline_ / (dis.at<float>(v, u));
+//             point[0] = x * depth;
+//             point[1] = y * depth;
+//             point[2] = depth;
+//             //
+//             pointcloud.push_back(point);
+//         }
+//     }
+//     current_frame_->stereo_pcl = pointcloud;
+//     return true;
+// }
 
 bool Frontend::BuildInitMap() {
     // std::vector<SE3> poses{camera_left_->pose(), camera_right_->pose()};

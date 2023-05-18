@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.0)
 project(zzslam)
 
 set(CMAKE_BUILD_TYPE Release)
@@ -29,16 +29,16 @@ find_package(Sophus REQUIRED)
 include_directories(${Sophus_INCLUDE_DIRS})
 
 # G2O
-find_package(G2O REQUIRED)
-include_directories(${G2O_INCLUDE_DIRS})
+# find_package(G2O REQUIRED)
+# include_directories(${G2O_INCLUDE_DIRS})
 
 # glog
 find_package(Glog REQUIRED)
 include_directories(${GLOG_INCLUDE_DIRS})
 
 # csparse
-find_package(CSparse REQUIRED)
-include_directories(${CSPARSE_INCLUDE_DIR})
+# find_package(CSparse REQUIRED)
+# include_directories(${CSPARSE_INCLUDE_DIR})
 
 
 set(THIRD_PARTY_LIBS
@@ -46,9 +46,9 @@ set(THIRD_PARTY_LIBS
         ${Sophus_LIBRARIES}
         ${Pangolin_LIBRARIES}
         # ${G2O_LIBRARIES}
-        g2o_core g2o_stuff g2o_types_sba g2o_solver_csparse g2o_csparse_extension
+        # g2o_core g2o_stuff g2o_types_sba g2o_solver_csparse g2o_csparse_extension
         ${GLOG_LIBRARIES}
-        ${CSPARSE_LIBRARY}
+        # ${CSPARSE_LIBRARY}
         pthread
         fmt
         )
